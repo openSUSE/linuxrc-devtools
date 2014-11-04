@@ -1,0 +1,16 @@
+#! /bin/bash
+
+unset LANG
+
+export USER_NAME=snwint_jenkins
+
+job_name=${JOB_NAME%-sr}
+
+if [ -z "$job_name" -o "$job_name" = "$JOB_NAME" ] ; then
+  echo "$JOB_NAME: unexpected job"
+  exit 1
+fi
+
+cd "../$job_name"
+
+tobs --wait-for-ok --sr

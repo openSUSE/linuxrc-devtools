@@ -1,0 +1,604 @@
+#! /usr/bin/perl
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# package Tmp version 1.0
+#
+# Create temporary files/directories and ensures they are removed at
+# program end.
+#
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+{
+  package Tmp;
+
+  use File::Temp;
+  use strict 'vars';
+
+  sub new
+  {
+    my $self = {};
+    my $save_tmp = shift;
+
+    bless $self;
+
+    my $x = $0;
+    $x =~ s#.*/##;
+    $x =~ s/(\s+|"|\\|')/_/;
+    $x = 'tmp' if$x eq "";
+
+    my $t = File::Temp::tempdir("/tmp/$x.XXXXXXXX", CLEANUP => $save_tmp ? 0 : 1);
+
+    $self->{base} = $t;
+
+    if(!$save_tmp) {
+      my $s_t = $SIG{TERM};
+      $SIG{TERM} = sub { File::Temp::cleanup; &$s_t if $s_t };
+
+      my $s_i = $SIG{INT};
+      $SIG{INT} = sub { File::Temp::cleanup; &$s_i if $s_i };
+    }
+
+    return $self
+  }
+
+  sub dir
+  {
+    my $self = shift;
+    my $dir = shift;
+    my $t;
+
+    if($dir ne "" && !-e("$self->{base}/$dir")) {
+      $t = "$self->{base}/$dir";
+      die "error: mktemp failed\n" unless mkdir $t, 0755;
+    }
+    else {
+      chomp ($t = `mktemp -d $self->{base}/XXXX`);
+      die "error: mktemp failed\n" if $?;
+    }
+
+    return $t;
+  }
+
+  sub file
+  {
+    my $self = shift;
+    my $file = shift;
+    my $t;
+
+    if($file ne "" && !-e("$self->{base}/$file")) {
+      $t = "$self->{base}/$file";
+      open my $f, ">$t";
+      close $f;
+    }
+    else {
+      chomp ($t = `mktemp $self->{base}/XXXX`);
+      die "error: mktemp failed\n" if $?;
+    }
+
+    return $t;
+  }
+
+  # helper function
+  sub umount
+  {
+    my $mp = shift;
+
+    if(open(my $f, "/proc/mounts")) {
+      while(<$f>) {
+        if((split)[1] eq $mp) {
+          # print STDERR "umount $mp\n";
+          ::susystem("umount $mp");
+          return;
+        }
+      }
+      close $f;
+    }
+  }
+
+  sub mnt
+  {
+    my $self = shift;
+    my $dir = shift;
+
+    my $t = $self->dir($dir);
+
+    if($t ne '') {
+      eval 'END { umount $t }';
+
+      my $s_t = $SIG{TERM};
+      $SIG{TERM} = sub { umount $t; &$s_t if $s_t };
+
+      my $s_i = $SIG{INT};
+      $SIG{INT} = sub { umount $t; &$s_i if $s_i };
+    }
+
+    return $t;
+  }
+}
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+use strict;
+
+use Getopt::Long;
+
+use Data::Dumper;
+$Data::Dumper::Sortkeys = 1;
+$Data::Dumper::Terse = 1;
+$Data::Dumper::Indent = 1;
+
+our $VERSION = "0.0";
+
+sub get_rc;
+sub get_gitdata;
+sub get_dist;
+sub update_spec;
+sub update_changelog;
+sub update_tag;
+sub do_sr;
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+my $config;
+my $user_name;
+
+my $opt_sr;
+my $opt_wait;
+my $opt_save_temp;
+my $opt_try;
+
+GetOptions(
+  'sr'          => \$opt_sr,
+  'wait-for-ok' => \$opt_wait,
+  'try'         => \$opt_try,
+  'save-temp'   => \$opt_save_temp,
+  'version'     => sub { print "$VERSION\n"; exit 0 },
+);
+
+my $tmp = Tmp::new($opt_save_temp);   
+
+my $tmpdir = $tmp->dir('package');
+
+if($ENV{USER_NAME}) {
+  $user_name = $ENV{USER_NAME};
+}
+else {
+  $user_name = (getpwuid $<)[0];
+}
+
+get_rc;
+
+get_gitdata;
+
+die "usage: tobs [options]\n" unless $config->{package};
+
+get_dist;
+
+exit do_sr if $opt_sr;
+
+if(open my $f, 'VERSION') {
+  chomp($config->{version} = <$f>);
+  close $f;
+}
+die "no version info\n" if $config->{version} eq "";
+
+my $changelog = "ChangeLog" if -f "ChangeLog";
+$changelog = "Changelog" if -f "Changelog";
+$changelog = "changelog" if -f "changelog";
+
+if($changelog && open my $f, $changelog) {
+  $config->{changelog} = [ <$f> ];
+  close $f;
+}
+
+die "missing changelog file\n" if !defined $config->{changelog};
+
+my @s = map { s#^[^/]*/##; $_ } glob("package/*");
+die "no source files\n" if !@s;
+
+$config->{archive} = "$config->{package}-$config->{version}.tar";
+for (sort @s) {
+  $config->{archive} = $_, last if /^$config->{archive}/;
+}
+die "package/$config->{archive}: archive missing\n" unless -f "package/$config->{archive}";
+
+@s = grep { $_ ne $config->{archive} } @s;
+$config->{sources}{$_} = 1 for @s;
+
+print "      Package: $config->{package}\n";
+print "      Version: $config->{version}\n";
+print "   GIT Branch: $config->{branch}\n";
+print "         Dist: $config->{dist}\n";
+print "      Project: $config->{prj}\n";
+print "    Submit To: $config->{sr}\n";
+print "           BS: $config->{bs}\n";
+print "      TMP Dir: $tmpdir\n";
+
+print "Checking out $config->{prj}/$config->{package}...\n";
+system "cd $tmpdir ; osc -A https://$config->{bs} co -c $config->{prj}/$config->{package} >/dev/null";
+system "ls -og $tmpdir/$config->{package} | tail -n +2";
+
+my @specs = map { s#.*/##; s#\.spec$##; $_ } glob("$tmpdir/$config->{package}/*.spec");
+if(@specs) {
+  $config->{spec_name} = $specs[0];
+  print "Package has several spec files; using $config->{spec_name} as base\n" if @specs > 1;
+}
+
+if(open my $f, "$tmpdir/$config->{package}/$config->{spec_name}.spec") {
+  $config->{spec_file} = [ <$f> ];
+  close $f;
+}
+
+die "missing spec file\n" if !defined $config->{spec_file};
+
+if(open my $f, "$tmpdir/$config->{package}/$config->{spec_name}.changes") {
+  $config->{changes} = [ <$f> ];
+  close $f;
+}
+
+die "missing changes\n" if !defined $config->{changes};
+
+update_spec;
+
+# write new spec file
+if(open my $f, ">$tmpdir/$config->{package}/$config->{spec_name}.spec") {
+  print $f @{$config->{spec_file}};
+  close $f;
+}
+
+update_changelog;
+
+# write new changes file
+if(open my $f, ">$tmpdir/$config->{package}/$config->{spec_name}.changes") {
+  print $f @{$config->{changes}};
+  close $f;
+}
+
+# delete obsolete files
+for ($config->{rm_archive}, keys %{$config->{rm_sources}}, keys %{$config->{rm_patches}}) {
+  # print "unlink $tmpdir/$config->{package}/$_\n";
+  unlink "$tmpdir/$config->{package}/$_";
+}
+
+# copy new files
+system "cp package/* $tmpdir/$config->{package}/";
+
+# copy changes and specs
+if(@specs > 1) {
+  my $base = shift @specs;
+  my $theme = $base;
+  $theme =~ s/.*-//;
+  for my $s (@specs) {
+    my $stheme = $s;
+    $stheme =~ s/.*-//;
+    system "cp $tmpdir/$config->{package}/$base.changes $tmpdir/$config->{package}/$s.changes";
+    system "perl -ple 's/^%define\\s+(\\S+)\\s+$theme\\s*\$/%define \$1 $stheme/' $tmpdir/$config->{package}/$base.spec > $tmpdir/$config->{package}/$s.spec";
+  }
+}
+
+# create new tag if needed
+update_tag;
+
+# updating bs project
+system "cd $tmpdir/$config->{package} ; osc -A https://$config->{bs} addremove";
+print "Submitting changes to $config->{prj}/$config->{package}...\n";
+system "cd $tmpdir/$config->{package} ; osc -A https://$config->{bs} ci -m '- release $config->{version}'" if !$opt_try;
+system "ls -og $tmpdir/$config->{package} | tail -n +2";
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+sub get_rc
+{
+  my $sec;
+  my @sections;
+
+  if(open my $f, "$ENV{HOME}/.tobsrc") {
+    while(<$f>) {
+      if(/^\s*\[(\S+)\]/) {
+        push @sections, $sec = { dist => $1 };
+        next;
+      }
+
+      $sec->{$1} = $2 if /^\s*(\S+)\s*=\s*(\S+)/;
+    }
+
+    close $f;
+  }
+
+  $config->{rc} = \@sections;
+}
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+sub get_gitdata
+{
+  die "no git repository found\n" unless -d '.git';
+
+  my $branch;
+
+  if(open my $p, "git branch 2>/dev/null |") {
+    while(<$p>) {
+      if(/^\*\s+(\S+)/) {
+        $branch = $1;
+        last;
+      }
+    }
+    close $p;
+  }
+
+  # $branch = undef if $branch eq 'master';
+
+  $config->{branch} = $branch;
+
+  my $pack = `git config --get remote.origin.url 2>/dev/null`;
+
+  if($pack =~ m#([^/.]+)\.git\s*$#) {
+    $pack = $1;
+  }
+  elsif($pack =~ m#([^/.]+?)\s*$#) {
+    $pack = $1;
+  }
+
+  $config->{package} = $pack if $pack ne "";
+
+  if(open my $p, "git tag 2>/dev/null |") {
+    while(<$p>) {
+      s/\/?\s*$//;
+      $config->{tags}{$_} = 1 if $_ ne "";
+    }
+    close $p;
+  }
+}
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+sub get_dist
+{
+  my $dist;
+
+  for (@{$config->{rc}}) {
+    if($_->{branch} eq $config->{branch}) {
+      # when git repo  and package name differ...
+      if($_->{package} ne "" && $_->{gitname} eq $config->{package}) {
+        $config->{package} = $_->{package};
+        $dist = $_;
+        last;
+      }
+      elsif($_->{package} eq $config->{package}) {
+        $dist = $_;
+        last;
+      }
+      $dist = $_ if !$_->{package};
+    }
+  }
+
+  die "no config for $config->{branch}\n" unless $dist;
+
+  $config->{dist} = $dist->{dist};
+  $config->{prj} = $dist->{prj};
+  $config->{bs} = $dist->{bs};
+  $config->{sr} = $dist->{sr};
+  $config->{sr} .= "/$config->{package}" if $config->{sr} && $config->{sr} !~ m#/#;
+}
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+sub update_spec
+{
+  my $spec_version;
+  my $spec_name;
+  my $setup = 0;
+
+  for (@{$config->{spec_file}}) {
+    last if /^%package\s+\-n/;
+
+    if(/^Version:(\s*)(\S+)/) {
+      $spec_version = $config->{spec_version} = $2;
+      $_ = "Version:$1$config->{version}\n";
+    }
+
+    if(/^Name:(\s*)(\S+)/) {
+      $spec_name = $2;
+    }
+
+    if(/^Source:(\s*)((\S+)\.tar\.(bz2|gz|xz))/) {
+      $config->{rm_archive} = $2;
+      my $s = $1;
+      my $n = $config->{archive};
+      $config->{rm_archive} =~ s/%\{name\}/$spec_name/g;
+      $config->{rm_archive} =~ s/%\{version\}/$spec_version/g;
+      $n =~ s/^$spec_name\-/%\{name\}-/ if $spec_name ne '';
+      $n =~ s/\-$config->{version}\.tar/-%\{version\}.tar/ if $spec_version ne "";
+      $_ = "Source:$s$n\n";
+      my $i = 1;
+      chop $s;
+      for my $x (sort keys %{$config->{sources}}) {
+        $_ .= "Source$i:$s$x\n";
+        $i++;
+      }
+    }
+
+    if(/^Source\d+:(\s*)((\S+)\.tar\.(bz2|gz|xz))/) {
+      $config->{rm_sources}{$2} = 1;
+      undef $_;
+    }
+
+    if(/^Patch(\d*):\s*(\S+)/) {
+      $config->{rm_patches}{$2} = 1;
+      print "Dropping patch: $2\n";
+      undef $_;
+    }
+
+    if(/^%patch/) {
+      undef $_;
+    }
+
+    if(/^%setup/) {
+      if($setup) {
+        undef $_;
+      }
+      else {
+        $setup = 1;
+        my $i = 1;
+        for my $x (keys %{$config->{sources}}) {
+          $_ .= "%setup -T -D -a $i\n";
+          $i++;
+        }
+      }
+    }
+  }
+
+  $config->{spec_file} = [ grep defined, @{$config->{spec_file}} ];
+
+  for(my $i = 1; $i < @{$config->{spec_file}}; $i++) {
+    $config->{spec_file}[$i] = $config->{spec_file}[$i - 1] = undef if $config->{spec_file}[$i] =~ /^%endif/ && $config->{spec_file}[$i - 1] =~ /%ifarch\s/;
+  }
+}
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+sub update_changelog
+{
+  my %log;
+  my $cv;
+  my @vers;
+  my $start;
+  my $log;
+
+  if($config->{version} ne $config->{spec_version}) {
+    for (@{$config->{changelog}}) {
+      if(/^\S+:\s+v?(\S+)/) {
+        $cv = $1;
+        $cv =~ s/^.*\-//;
+        $cv =~ s/HEAD/$config->{version}/;
+        unshift @vers, $cv;
+        next;
+      }
+      if(!/^\s*$/) {
+        s/^\t//;
+        $log{$cv} .= $_;
+        next;
+      }
+    }
+
+    die "Version $config->{version} not found in changelog\n" unless $log{$config->{version}};
+    die "Version $config->{spec_version} not found in changelog\n" unless $log{$config->{spec_version}};
+
+    for (@vers) {
+      if($_ eq $config->{spec_version}) {
+        $start = 1;
+        next;
+      }
+      if($start) {
+        $log .= $log{$_};
+      }
+      last if $_ eq $config->{version};
+    }
+  }
+
+  for (sort keys %{$config->{sources}}) {
+    $log .= "- adding $_\n" if !$config->{rm_sources}{$_};
+  }
+
+  for (sort keys %{$config->{rm_sources}}) {
+    $log .= "- removing $_\n" if !$config->{sources}{$_};
+  }
+
+  for (sort keys %{$config->{rm_patches}}) {
+    $log .= "- removing patch $_\n";
+  }
+
+  if($log) {
+    $log .= "- $config->{version}\n";
+
+    my $d = `LANGUAGE=C LC_ALL=C date`; chomp $d;
+    $log = "-" x 67 . "\n$d - $user_name\@suse.com\n\n" . $log . "\n";
+
+    unshift @{$config->{changes}}, $log;
+
+    print "New changelog entry:\n", $log, "-" x 67, "\n";
+  }
+}
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+sub update_tag
+{
+  my $tag = "$config->{branch}-$config->{version}";
+  $tag =~ s/^master-//;
+
+  if(!$config->{tags}{$tag}) {
+    print "Creating tag $tag\n";
+    system "git tag $tag ; git push origin tags/$tag" if !$opt_try;
+  }
+}
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+sub do_sr
+{
+  print "      Package: $config->{package}\n";
+  print "   GIT Branch: $config->{branch}\n";
+  print "         Dist: $config->{dist}\n";
+  print "      Project: $config->{prj}\n";
+  print "    Submit To: $config->{sr}\n";
+  print "           BS: $config->{bs}\n";
+
+  my @s = split '/', $config->{sr};
+
+  if($opt_wait) {
+    my $ok;
+    my $failed;
+    my $building;
+    my $delay = 30;
+
+    print "Waiting for build results of $config->{prj}/$s[1]...\n";
+    $| = 1;
+
+    do {
+      sleep $delay;
+      if(open my $p, "osc -A https://$config->{bs} r --csv $config->{prj} $s[1] |") {
+        while (<$p>) {
+          my @i = split /\|/;
+          if($i[3] eq "False" && $i[4] eq "succeeded") {
+            $ok = 1;
+          }
+          elsif($i[3] eq "False" && $i[4] eq "failed") {
+            $failed = 1;
+          }
+          else {
+            $building = 1;
+          }
+        }
+        $failed = 1 if !$building;
+        close $p;
+      }
+      else {
+        last;
+      }
+    } while(!$ok && !$failed);
+
+    if(!$ok && $failed) {
+      print "Build failed\n";
+      return 1;
+    }
+
+    print "Build ok\n";
+  }
+
+  if(!$config->{sr}) {
+    print "No submit request created\n";
+
+    return 0;
+  }
+
+  print "Creating submit request to $config->{sr}\n";
+
+  if(!$opt_try) {
+    system "echo y | osc -A https://$config->{bs} sr -m 'submitted by $user_name' --yes --nodevelproject $config->{prj} $s[1] $s[0]";
+
+    return $? >> 8;
+  }
+
+  return 0;
+}
+
