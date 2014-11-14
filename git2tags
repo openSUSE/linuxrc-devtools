@@ -1,0 +1,84 @@
+#! /usr/bin/perl
+
+use Getopt::Long;
+
+use Data::Dumper;
+$Data::Dumper::Sortkeys = 1;
+$Data::Dumper::Terse = 1;
+$Data::Dumper::Indent = 1;
+
+use strict;
+
+sub usage;
+
+my $opt_watch = "version";
+
+GetOptions(
+  'help'         => sub { usage 0 },
+  'watch|w=s'    => \$opt_watch,
+) || usage 1;
+
+usage 1 if @ARGV;
+
+my @commits;
+
+if(open my $f, "git log -- $opt_watch |") {
+  while(<$f>) {
+    push @commits, [ $1 ] if /^commit\s(\S+)/;
+  }
+
+  close $f;
+}
+
+for my $c (@commits) {
+  if(open my $f, "git branch --contains $c->[0] |") {
+    my ($br, $m);
+    while(<$f>) {
+      chomp;
+      $br = $1 if /^\*\s*(\S+)/;
+      $m = 1 if /^\*?\s*master/;
+    }
+
+    close $f;
+
+    $c->[1] = $br if $br && !$m;
+  }
+}
+
+for my $c (@commits) {
+  if(open my $f, "git show $c->[0] |") {
+    my $v = 0;
+    while(<$f>) {
+      chomp;
+      $v = 1, next if /^\+\+\+ b\/$opt_watch/;
+      if($v && /^\+(\S+)/) {
+        $c->[2] = $1;
+        last;
+      }
+    }
+
+    close $f;
+  }
+}
+
+for my $c (@commits) {
+  my $t = $c->[2];
+  $t = "$c->[1]-$t" if $c->[1];
+  print "git tag $t $c->[0]\n";
+}
+
+
+sub usage
+{
+  my $err = shift;
+
+  print <<"  usage";
+Usage: git2tags [OPTIONS]
+Try to relate git commits to tags and branch names based on changes to a version file.
+  -w, --watch   Version file (default: \"$opt_watch\")
+  --help        Print this help text.
+  usage
+
+  exit $err;
+}
+
