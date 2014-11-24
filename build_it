@@ -13,7 +13,16 @@ grep -q -s distclean: Makefile* && clean_target=distclean
 git status
 git checkout $branch
 git pull
-make $clean_target && \
-make archive && \
-tobs && \
+
+make $clean_target
+
+if [ -d package ] ; then
+  echo 'old archive files found!'
+  exit 1
+fi
+
+make archive
+
+tobs
+
 make $clean_target
