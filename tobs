@@ -139,7 +139,6 @@ sub do_sr;
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 my $config;
-my $user_name;
 
 my $opt_sr;
 my $opt_wait;
@@ -157,13 +156,6 @@ GetOptions(
 my $tmp = Tmp::new($opt_save_temp);   
 
 my $tmpdir = $tmp->dir('package');
-
-if($ENV{USER_NAME}) {
-  $user_name = $ENV{USER_NAME};
-}
-else {
-  $user_name = (getpwuid $<)[0];
-}
 
 get_rc;
 
@@ -210,6 +202,7 @@ print "   GIT Branch: $config->{branch}\n";
 print "         Dist: $config->{dist}\n";
 print "      Project: $config->{prj}\n";
 print "    Submit To: $config->{sr}\n";
+print "   Maintainer: $config->{email}\n";
 print "           BS: $config->{bs}\n";
 print "      TMP Dir: $tmpdir\n";
 
@@ -378,6 +371,26 @@ sub get_dist
   $config->{bs} = $dist->{bs};
   $config->{sr} = $dist->{sr};
   $config->{sr} .= "/$config->{package}" if $config->{sr} && $config->{sr} !~ m#/#;
+
+  if($ENV{USER_NAME}) {
+    $config->{email} = $ENV{USER_NAME};
+  }
+  elsif(open my $p, "osc -A https://$config->{bs} maintainer -e -B $config->{prj} $config->{package} |") {
+    while (<$p>) {
+      s/^\s+//;
+      s/,.*$//;
+      s/\s*$//;
+      if(/\@/) {
+        $config->{email} = $_;
+        last;
+      }
+    }
+    close $p;
+  }
+
+  $config->{email} = (getpwuid $<)[0] if !$config->{email};
+
+  $config->{email} .= "\@suse.com" if $config->{email} !~ /\@/;
 }
 
 
@@ -511,7 +524,7 @@ sub update_changelog
     $log .= "- $config->{version}\n";
 
     my $d = `LANGUAGE=C LC_ALL=C date`; chomp $d;
-    $log = "-" x 67 . "\n$d - $user_name\@suse.com\n\n" . $log . "\n";
+    $log = "-" x 67 . "\n$d - $config->{email}\n\n" . $log . "\n";
 
     unshift @{$config->{changes}}, $log;
 
@@ -541,6 +554,7 @@ sub do_sr
   print "         Dist: $config->{dist}\n";
   print "      Project: $config->{prj}\n";
   print "    Submit To: $config->{sr}\n";
+  print "   Maintainer: $config->{email}\n";
   print "           BS: $config->{bs}\n";
 
   my @s = split '/', $config->{sr};
@@ -594,7 +608,9 @@ sub do_sr
   print "Creating submit request to $config->{sr}\n";
 
   if(!$opt_try) {
-    system "echo y | osc -A https://$config->{bs} sr -m 'submitted by $user_name' --yes --nodevelproject $config->{prj} $s[1] $s[0]";
+    my $user = $config->{email};
+    $user =~ s/\@.*$//;
+    system "echo y | osc -A https://$config->{bs} sr -m 'submitted by $user via jenkins' --yes --nodevelproject $config->{prj} $s[1] $s[0]";
 
     return $? >> 8;
   }
