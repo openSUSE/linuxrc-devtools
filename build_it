@@ -2,8 +2,6 @@
 
 unset LANG
 
-export USER_NAME=snwint_jenkins
-
 branch=master
 [ -n "$1" ] && branch=$1
 
