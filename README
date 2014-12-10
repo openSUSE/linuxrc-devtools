@@ -22,6 +22,14 @@ multiple changelog entries.
 Expects numerical tags matching version number, like 1.2.3. For branches !=
 master, tags should be <branch>-<version>.
 
+You can create test branches from any main branch (e.g. for pull requests,
+with 'git co -b'). git2log recognizes those branches and treats them as
+continuation of the main branch.
+
+From git2log's perspective a test branch is just a branch without tags in
+it. But it should also have a name starting with either 'test' or 'bnc' as
+tobs expects this.
+
 
 ***  tobs  ***
 
@@ -57,6 +65,11 @@ There is a '--try' option that does everything except actually submitting
 the changes to the build service or setting the new tag. Use together with
 '--save-temp' to debug things.
 
+If you are on a branch with a name starting with either 'test' or 'bnc',
+tobs handles this as a test build. That is, the package is submitted to a
+special test project (see 'test' entry in config file) and no submit
+requests are created.
+
 
 ***  tobs --sr  ***
 
@@ -78,6 +91,7 @@ Examples:
   [factory]
   branch=master
   prj=system:install:head
+  test=home:xxx:factory
   sr=openSUSE:Factory
   bs=api.opensuse.org
 
@@ -85,6 +99,8 @@ Examples:
   git project in the system:install:head build service project ('devel
   project'). When creating a submit request, submit to openSUSE:Factory. Use
   the opensuse.org build service.
+
+  Test builds are done in home:xxx:factory.
 
 
   [factory]
