@@ -131,6 +131,7 @@ our $VERSION = "0.0";
 sub get_rc;
 sub get_gitdata;
 sub get_dist;
+sub get_parent_branch;
 sub update_spec;
 sub update_changelog;
 sub update_tag;
@@ -156,6 +157,7 @@ GetOptions(
 my $tmp = Tmp::new($opt_save_temp);   
 
 my $tmpdir = $tmp->dir('package');
+my $tmpdir2 = $tmp->dir('testpackage');
 
 get_rc;
 
@@ -201,6 +203,7 @@ print "      Version: $config->{version}\n";
 print "   GIT Branch: $config->{branch}\n";
 print "         Dist: $config->{dist}\n";
 print "      Project: $config->{prj}\n";
+print " Test Project: $config->{test}\n" if $config->{test};
 print "    Submit To: $config->{sr}\n";
 print "   Maintainer: $config->{email}\n";
 print "           BS: $config->{bs}\n";
@@ -209,6 +212,14 @@ print "      TMP Dir: $tmpdir\n";
 print "Checking out $config->{prj}/$config->{package}...\n";
 system "cd $tmpdir ; osc -A https://$config->{bs} co -c $config->{prj}/$config->{package} >/dev/null";
 system "ls -og $tmpdir/$config->{package} | tail -n +2";
+
+if($config->{test}) {
+  print "Checking out $config->{test}/$config->{package}...\n";
+  if(system "cd $tmpdir2 ; osc -A https://$config->{bs} co -c $config->{test}/$config->{package} >/dev/null") {
+    die "missing test project $config->{test}/$config->{package}\n"
+  }
+  # system "ls -og $tmpdir2/$config->{package} | tail -n +2";
+}
 
 my @specs = map { s#.*/##; s#\.spec$##; $_ } glob("$tmpdir/$config->{package}/*.spec");
 if(@specs) {
@@ -269,14 +280,24 @@ if(@specs > 1) {
 }
 
 # create new tag if needed
-update_tag;
+update_tag if !$config->{test};
 
 # updating bs project
-system "cd $tmpdir/$config->{package} ; osc -A https://$config->{bs} addremove";
-print "Submitting changes to $config->{prj}/$config->{package}...\n";
-system "cd $tmpdir/$config->{package} ; osc -A https://$config->{bs} ci -m '- release $config->{version}'" if !$opt_try;
-system "ls -og $tmpdir/$config->{package} | tail -n +2";
+if($config->{test}) {
+  system "rm -f $tmpdir2/$config->{package}/*";
+  system "cp -a $tmpdir/$config->{package}/* $tmpdir2/$config->{package}/";
 
+  system "cd $tmpdir2/$config->{package} ; osc -A https://$config->{bs} addremove";
+  print "Submitting changes to $config->{test}/$config->{package}...\n";
+  system "cd $tmpdir2/$config->{package} ; osc -A https://$config->{bs} ci -m '- release $config->{version}'" if !$opt_try;
+  system "ls -og $tmpdir2/$config->{package} | tail -n +2";
+}
+else {
+  system "cd $tmpdir/$config->{package} ; osc -A https://$config->{bs} addremove";
+  print "Submitting changes to $config->{prj}/$config->{package}...\n";
+  system "cd $tmpdir/$config->{package} ; osc -A https://$config->{bs} ci -m '- release $config->{version}'" if !$opt_try;
+  system "ls -og $tmpdir/$config->{package} | tail -n +2";
+}
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 sub get_rc
@@ -320,6 +341,14 @@ sub get_gitdata
 
   # $branch = undef if $branch eq 'master';
 
+  if($branch =~ /^(test|bnc)/) {
+    my $b = get_parent_branch $branch;
+    if($b) {
+      $config->{testbranch} = $branch;
+      $branch = $b;
+    }
+  }
+
   $config->{branch} = $branch;
 
   my $pack = `git config --get remote.origin.url 2>/dev/null`;
@@ -340,6 +369,23 @@ sub get_gitdata
     }
     close $p;
   }
+}
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+sub get_parent_branch
+{
+  my $branch = shift;
+
+  my $p;
+
+  for (`git log -g --pretty=oneline`) {
+    $p = $1 if /checkout: moving from (\S+) to $branch/;
+  }
+
+  # print "parent = $p\n";
+
+  return $p;
 }
 
 
@@ -368,6 +414,14 @@ sub get_dist
 
   $config->{dist} = $dist->{dist};
   $config->{prj} = $dist->{prj};
+  if($config->{testbranch}) {
+    if($dist->{test}) {
+      $config->{test} = $dist->{test};
+    }
+    else {
+      die "no test project defined for $config->{package} in $config->{dist}\n";
+    }
+  }
   $config->{bs} = $dist->{bs};
   $config->{sr} = $dist->{sr};
   $config->{sr} .= "/$config->{package}" if $config->{sr} && $config->{sr} !~ m#/#;
@@ -553,9 +607,15 @@ sub do_sr
   print "   GIT Branch: $config->{branch}\n";
   print "         Dist: $config->{dist}\n";
   print "      Project: $config->{prj}\n";
+  print " Test Project: $config->{test}\n" if $config->{test};
   print "    Submit To: $config->{sr}\n";
   print "   Maintainer: $config->{email}\n";
   print "           BS: $config->{bs}\n";
+
+  if($config->{test}) {
+    print "\nNo submit requests for test builds!\n";
+    return 0;
+  }
 
   my @s = split '/', $config->{sr};
 
