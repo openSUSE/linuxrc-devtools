@@ -145,11 +145,13 @@ my $opt_sr;
 my $opt_wait;
 my $opt_save_temp;
 my $opt_try;
+my $opt_test;
 
 GetOptions(
   'sr'          => \$opt_sr,
   'wait-for-ok' => \$opt_wait,
   'try'         => \$opt_try,
+  'test'        => \$opt_test,
   'save-temp'   => \$opt_save_temp,
   'version'     => sub { print "$VERSION\n"; exit 0 },
 );
@@ -341,7 +343,7 @@ sub get_gitdata
 
   # $branch = undef if $branch eq 'master';
 
-  if($branch =~ /^(test|bnc)/) {
+  if($opt_test || $branch =~ /^(test|bnc)/) {
     my $b = get_parent_branch $branch;
     if($b) {
       $config->{testbranch} = $branch;
