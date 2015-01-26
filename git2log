@@ -271,7 +271,7 @@ sub get_parent_branch
 
   # print "parent = $p\n";
 
-  return $p;
+  return $p || "master";
 }
 
 
