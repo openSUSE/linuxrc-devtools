@@ -146,10 +146,12 @@ my $opt_wait;
 my $opt_save_temp;
 my $opt_try;
 my $opt_test;
+my $opt_delay = 30;
 
 GetOptions(
   'sr'          => \$opt_sr,
   'wait-for-ok' => \$opt_wait,
+  'delay=i'     => \$opt_delay,
   'try'         => \$opt_try,
   'test'        => \$opt_test,
   'save-temp'   => \$opt_save_temp,
@@ -625,7 +627,7 @@ sub do_sr
     my $ok;
     my $failed;
     my $building;
-    my $delay = 30;
+    my $delay = $opt_delay;
 
     print "Waiting for build results of $config->{prj}/$s[1]...\n";
     $| = 1;
@@ -634,11 +636,24 @@ sub do_sr
       sleep $delay;
       if(open my $p, "osc -A https://$config->{bs} r --csv $config->{prj} $s[1] |") {
         while (<$p>) {
+          chomp;
           my @i = split /\|/;
-          if($i[3] eq "False" && $i[4] eq "succeeded") {
+          if(
+            $i[3] eq "False" &&
+            (
+              $i[4] eq "succeeded" ||
+              $i[4] eq "finished" && $i[5] eq "succeeded"
+            )
+          ) {
             $ok = 1;
           }
-          elsif($i[3] eq "False" && $i[4] eq "failed") {
+          elsif(
+            $i[3] eq "False" &&
+            (
+              $i[4] eq "failed" ||
+              $i[4] eq "finished" && $i[5] eq "failed"
+            )
+          ) {
             $failed = 1;
           }
           else {
@@ -651,7 +666,7 @@ sub do_sr
       else {
         last;
       }
-    } while(!$ok && !$failed);
+    } while(!$ok && $building);
 
     if(!$ok && $failed) {
       print "Build failed\n";
