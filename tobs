@@ -584,6 +584,9 @@ sub update_changelog
     my $d = `LANGUAGE=C LC_ALL=C date`; chomp $d;
     $log = "-" x 67 . "\n$d - $config->{email}\n\n" . $log . "\n";
 
+    $log =~ s/(bnc|bsc)\s*#/bsc#/g;
+    $log =~ s/fate\s*#/fate#/g;
+
     unshift @{$config->{changes}}, $log;
 
     print "New changelog entry:\n", $log, "-" x 67, "\n";
