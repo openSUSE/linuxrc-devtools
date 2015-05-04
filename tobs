@@ -128,6 +128,7 @@ $Data::Dumper::Indent = 1;
 
 our $VERSION = "0.0";
 
+sub usage;
 sub get_rc;
 sub get_gitdata;
 sub get_dist;
@@ -147,6 +148,7 @@ my $opt_save_temp;
 my $opt_try;
 my $opt_test;
 my $opt_delay = 30;
+my $opt_target;
 
 GetOptions(
   'sr'          => \$opt_sr,
@@ -154,9 +156,12 @@ GetOptions(
   'delay=i'     => \$opt_delay,
   'try'         => \$opt_try,
   'test'        => \$opt_test,
+  'no-test'     => sub { $opt_test = 0 },
+  'target=s'    => \$opt_target,
   'save-temp'   => \$opt_save_temp,
   'version'     => sub { print "$VERSION\n"; exit 0 },
-);
+  'help'        => sub { usage 0 },
+) || usage 1;
 
 my $tmp = Tmp::new($opt_save_temp);   
 
@@ -167,7 +172,7 @@ get_rc;
 
 get_gitdata;
 
-die "usage: tobs [options]\n" unless $config->{package};
+usage 1 unless $config->{package};
 
 get_dist;
 
@@ -303,6 +308,73 @@ else {
   system "ls -og $tmpdir/$config->{package} | tail -n +2";
 }
 
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# usage($exit_code)
+#
+# Print help text and exit.
+#
+sub usage
+{
+  print <<"= = = = = = = =";
+Usage: tobs [OPTIONS]
+Submit from git to build system.
+
+General options:
+
+  --target TARGET           Choose config from section TARGET in config file.
+  --try                     Don't actually do anything.
+
+  --version                 Show tobs version.
+  --save-temp               Keep temporary files.
+  --help                    Write this help text.
+
+Create submit request:
+
+  --sr                      Create submit request from devel project to target project.
+  --wait-for-ok             Wait until package has built ok on at least one architecture
+                            in devel project.
+  --delay N                 Wait N seconds between polling for build results (default: 30).
+
+Submit to devel project (no --sr option given):
+
+  --test                    Assume we are in a sub-branch in git and submit to the special
+                            test project.
+  --no-test                 Assume we are in a sub-branch in git and submit to the usual
+                            devel project. This is not the opposite of --test!
+
+  Note 1: You are expected to create the necessary files running 'make archive' before
+  using tobs.
+
+  Note 2: If a branch is named starting with 'test', 'fate', 'bnc', or 'bsc', tobs assumes
+  you are in a sub-branch of the actual devel branch and look up the config accordingly.
+  Also, it will submit the package to the test project.
+  If you are using either --test or --no-test, tobs will always assume you are in a sub-branch
+  and submit to the test project or devel project depending on the option chosen.
+
+Configuration file:
+
+  \$HOME/.tobsrc
+
+  Typical .ini style with entries in key=value form and section names in brackets ('[]').
+
+  Section names are arbitrary but can be thought of as target distribution.
+  See README for some config entry examples.
+
+Examples:
+
+  # submit from current git dir to devel project
+  tobs
+
+  # create submit request from devel project to target project
+  tobs --sr
+
+= = = = = = = =
+
+  exit shift;
+}
+
+
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 sub get_rc
 {
@@ -345,10 +417,17 @@ sub get_gitdata
 
   # $branch = undef if $branch eq 'master';
 
-  if($opt_test || $branch =~ /^(test|bnc)/) {
+  print "BRANCH $branch\n";
+
+  if(defined($opt_test) || $branch =~ /^(test|bnc|bsc|fate)/) {
     my $b = get_parent_branch $branch;
     if($b) {
-      $config->{testbranch} = $branch;
+      if(defined($opt_test) && !$opt_test) {
+        $config->{branch} = $branch;
+      }
+      else {
+        $config->{testbranch} = $branch;
+      }
       $branch = $b;
     }
   }
@@ -399,6 +478,7 @@ sub get_dist
   my $dist;
 
   for (@{$config->{rc}}) {
+    next if $opt_target && $_->{dist} ne $opt_target;
     if($_->{branch} eq $config->{branch}) {
       # when git repo  and package name differ...
       if($_->{package} ne "" && $_->{gitname} eq $config->{package}) {
