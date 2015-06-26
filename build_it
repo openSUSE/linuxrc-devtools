@@ -2,6 +2,12 @@
 
 unset LANG
 
+if [ "$1" = "--dist" ] ; then
+  dist="--target $2"
+  shift
+  shift
+fi
+
 branch=master
 [ -n "$1" ] && branch=$1
 
@@ -21,6 +27,6 @@ fi
 
 make archive
 
-tobs
+tobs $dist
 
 make $clean_target

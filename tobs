@@ -347,7 +347,7 @@ Submit to devel project (no --sr option given):
   using tobs.
 
   Note 2: If a branch is named starting with 'test', 'fate', 'bnc', or 'bsc', tobs assumes
-  you are in a sub-branch of the actual devel branch and look up the config accordingly.
+  you are in a sub-branch of the actual devel branch and looks up the config accordingly.
   Also, it will submit the package to the test project.
   If you are using either --test or --no-test, tobs will always assume you are in a sub-branch
   and submit to the test project or devel project depending on the option chosen.
@@ -417,7 +417,7 @@ sub get_gitdata
 
   # $branch = undef if $branch eq 'master';
 
-  print "BRANCH $branch\n";
+  # print "BRANCH $branch\n";
 
   if(defined($opt_test) || $branch =~ /^(test|bnc|bsc|fate)/) {
     my $b = get_parent_branch $branch;
@@ -490,7 +490,7 @@ sub get_dist
         $dist = $_;
         last;
       }
-      $dist = $_ if !$_->{package};
+      $dist = $_, last if !$_->{package};
     }
   }
 

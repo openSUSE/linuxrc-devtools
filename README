@@ -84,7 +84,8 @@ tobs uses a config file to relate build service projects to git repos.
 
 Note: section names are arbitrary and used only for logging. You can have
 multiple sections with the same name. If several sections match (based on
-package and branch names) the most specific match is used.
+package and branch names) the first match is used. So put more general
+sections last.
 
 Examples:
 

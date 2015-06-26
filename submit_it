@@ -2,6 +2,12 @@
 
 unset LANG
 
+if [ "$1" = "--dist" ] ; then
+  dist="--target $2"
+  shift
+  shift
+fi
+
 job_name=${JOB_NAME%-sr}
 
 if [ -z "$job_name" -o "$job_name" = "$JOB_NAME" ] ; then
@@ -11,4 +17,4 @@ fi
 
 cd "../$job_name"
 
-tobs --wait-for-ok --sr
+tobs --wait-for-ok --sr $dist
