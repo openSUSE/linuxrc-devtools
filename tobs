@@ -699,9 +699,11 @@ sub do_sr
   print "   Maintainer: $config->{email}\n";
   print "           BS: $config->{bs}\n";
 
+  my $err = 0;
+
   if($config->{test}) {
     print "\nNo submit requests for test builds!\n";
-    return 0;
+    return $err;
   }
 
   my @s = split '/', $config->{sr};
@@ -753,6 +755,7 @@ sub do_sr
 
     if(!$ok && $failed) {
       print "Build failed\n";
+
       return 1;
     }
 
@@ -762,19 +765,37 @@ sub do_sr
   if(!$config->{sr}) {
     print "No submit request created\n";
 
-    return 0;
+    return $err;
   }
 
   print "Creating submit request to $config->{sr}\n";
 
   if(!$opt_try) {
+    my $sr_resp = $tmp->file();
     my $user = $config->{email};
     $user =~ s/\@.*$//;
-    system "echo y | osc -A https://$config->{bs} sr -m 'submitted by $user via jenkins' --yes --nodevelproject $config->{prj} $s[1] $s[0]";
+    system "echo y | osc -A https://$config->{bs} sr -m 'submitted by $user via jenkins' --yes --nodevelproject $config->{prj} $s[1] $s[0] >$sr_resp 2>&1";
+    $err = $? >> 8;
 
-    return $? >> 8;
+    my $resp_msg;
+
+    if(open my $f, $sr_resp) {
+      local $/ = undef;
+      $resp_msg = <$f>;
+      close $f;
+    }
+
+    if($err) {
+      if($resp_msg =~ /The request contains no actions./) {
+        $resp_msg =~ s/^.*HTTP Error 400:.*\n//m;
+        $resp_msg .= "no request created\nFinished: SUCCESS\n";
+        $err = 0;
+      }
+    }
+
+    print $resp_msg;
   }
 
-  return 0;
+  return $err;
 }
 
