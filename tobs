@@ -323,7 +323,7 @@ Submit from git to build system.
 General options:
 
   --target TARGET           Choose config from section TARGET in config file.
-  --try                     Don't actually do anything.
+  --try                     Don\'t actually do anything.
 
   --version                 Show tobs version.
   --save-temp               Keep temporary files.
