@@ -11,7 +11,9 @@ For these to work the git project must fulfill some requirements:
 * there must be an `archive` target that creates a source tar file (details see
   below)
 
-## git2log
+## Tools
+
+### git2log
 
 Generate a changelog file based on git commit messages.
 
@@ -31,7 +33,7 @@ From _git2log's_ perspective a test branch is just a branch without tags in
 it. But it should also have a name starting with either 'test' or 'bnc' as
 _tobs_ expects this.
 
-## tobs
+### tobs
 
 Commit current git state to build service.
 
@@ -66,13 +68,13 @@ _tobs_ handles this as a test build. That is, the package is submitted to a
 special test project (see 'test' entry in config file) and no submit
 requests are created.
 
-### tobs --sr
+#### tobs --sr
 
 If you use the `--sr` option it will create a build service submit request.
 With `--wait-for-ok` it optionally waits until the package has been built
 successfully in the originating project.
 
-### $HOME/.tobsrc
+#### $HOME/.tobsrc
 
 _tobs_ uses a config file to relate build service projects to git repos.
 
@@ -106,7 +108,7 @@ Test builds are done in home:xxx:factory.
     bs=api.opensuse.org
 
 Similar as above but git project name and build service package name
-differ. Note that  make archive` must produce a name matching the build
+differ. Note that `make archive` must produce a name matching the build
 service package, not the git repo name.
 
     [factory]
@@ -119,17 +121,45 @@ service package, not the git repo name.
 Similar to first example but build service package names differ in devel
 project and target project (e.g. you have several `*.spec` files).
 
-## build_it
+### build_it
 
   Wrapper script for _tobs_ to be run by Jenkins.
 
   `tobs <branch>` checks out <branch>, runs `make archive`, and then `tobs`.
 
 
-## submit_it
+### submit_it
 
   Wrapper script for `tobs --sr` to be run by Jenkins.
 
   This assumes the Jenkins job name to be `<foo>-sr` and a previously
   finished Jenkins job `<foo>`. It changes to the `<foo>` workspace and runs
   `tobs --wait-for-ok --sr`.
+
+## openSUSE development
+
+At a first glance, Linuxrc (and related projects) follows the same approach as other YaST projects:
+changes are tracked on Github and Jenkins CI will take care of submitting them to OBS. However,
+tools used by these projects are different from the ones used for YaST.
+
+Those tools are available in [linuxrc-devtools](http://github.com/openSUSE/linuxrc-devtools).
+Next we'll introduce them (and how are they related to Jenkins) but it's recommended to check the
+[documentation](https://github.com/openSUSE/linuxrc-devtools/blob/master/README.md)
+in the repository.
+
+When Jenkins detect changes on, for example,
+[Linuxrc](http://github.com/openSUSE/linuxrc) Git repository, it will build the
+project using [build_it
+script](https://github.com/openSUSE/linuxrc-devtools/blob/master/build_it).
+This script is just a wrapper that, after building the `make archive` target,
+will invoke
+[tobs](https://github.com/openSUSE/linuxrc-devtools/blob/master/tobs) which
+will take care of submitting the new version to the development project on OBS.
+Branches, projects, etc. to submit to are defined in `tobs` configuration. For
+example, for _Factory_, `master` branch will be submited to `system:install:head/linuxrc`.
+
+If the previous step ran successfully, then a submit request to the final
+project will be created through the [submit_it
+script](https://github.com/openSUSE/linuxrc-devtools/blob/master/submit_it),
+which is just another wrapper script that will rely on `tobs`. For example, for
+_Factory_, the project will be submitted to `openSUSE:Factory/linuxrc`.
