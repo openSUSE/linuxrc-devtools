@@ -30,3 +30,4 @@ archive: changelog
 	xz -f package/$(PREFIX).tar
 
 clean:
+	@rm -rf *~ package
