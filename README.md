@@ -138,6 +138,8 @@ project and target project (e.g. you have several `*.spec` files).
 
 ## openSUSE development
 
+### Workflow
+
 At a first glance, Linuxrc (and related projects) follows the same approach as other YaST projects:
 changes are tracked on Github and Jenkins CI will take care of submitting them to OBS. However,
 tools used by these projects are different from the ones used for YaST.
@@ -156,10 +158,17 @@ will invoke
 [tobs](https://github.com/openSUSE/linuxrc-devtools/blob/master/tobs) which
 will take care of submitting the new version to the development project on OBS.
 Branches, projects, etc. to submit to are defined in `tobs` configuration. For
-example, for _Factory_, `master` branch will be submited to `system:install:head/linuxrc`.
+example, for _Factory_, `master` branch will be submitted to `system:install:head/linuxrc`.
 
 If the previous step ran successfully, then a submit request to the final
 project will be created through the [submit_it
 script](https://github.com/openSUSE/linuxrc-devtools/blob/master/submit_it),
 which is just another wrapper script that will rely on `tobs`. For example, for
 _Factory_, the project will be submitted to `openSUSE:Factory/linuxrc`.
+
+### linuxrc-devtools
+
+The package is automatically submitted from the `master` branch to
+[system:install:head](https://build.opensuse.org/package/show/system:install:head/linuxrc-devtools)
+OBS project. From that place it is forwarded to
+[openSUSE Factory](https://build.opensuse.org/project/show/openSUSE:Factory).
