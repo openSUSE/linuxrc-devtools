@@ -56,7 +56,7 @@ my $opt_max;
 my $opt_width = 66;
 my $opt_width_fuzz = 8;
 my $opt_sep_width = 68;
-my $opt_format = 'internal';	# internal, obs
+my $opt_format = 'obs';		# obs, internal
 
 GetOptions(
   'help'          => sub { usage 0 },
@@ -67,6 +67,7 @@ GetOptions(
   'format=s'      => \$opt_format,
   'max=i'         => \$opt_max,
   'width=i'       => \$opt_width,
+  'fuzz=i'        => \$opt_width_fuzz,
   'log|changelog' => \$opt_log,
 ) || usage 1;
 
@@ -108,6 +109,14 @@ if($opt_version) {
   exit 0;
 }
 
+# set start tag
+if($opt_start) {
+  my $x = is_formatted_tag $opt_start;
+  die "$opt_start: not a valid start tag\n" if !$x;
+  $x->{branch} = $config->{branch} if !$x->{branch};
+  $config->{start} = $x;
+}
+
 format_all_logs;
 
 # print Dumper $config;
@@ -129,11 +138,17 @@ sub usage
   print <<"  usage";
 Usage: git2log [OPTIONS] [FILE]
 Create changelog and project version from git repo.
-  --changelog   Write changelog to FILE.
-  --version     Write version number to FILE.
-  --branch      Write current branch to FILE.
-  --update      Write changelog or version only if FILE is outdated.
-  --help        Print this help text.
+  --changelog         Write changelog to FILE.
+  --version           Write version number to FILE.
+  --branch            Write current branch to FILE.
+  --start START_TAG   Start with tag START_TAG.
+  --max N             Write at most MAX long entries.
+  --update            Write changelog or version only if FILE is outdated.
+  --format FORMAT     Write log using FORMAT. Supported FORMATs are 'obs' and 'internal'.
+  --width WIDTH       Reformat log entries to be max WIDTH chars wide.
+  --fuzz FUZZ         Allow log lines to be up to FUZZ chars longer as WIDTH to avoid
+                      line breaks leaving tiny bits on the last line.
+  --help              Print this help text.
   usage
 
   exit $err;
@@ -390,6 +405,10 @@ sub add_head_tag
 sub format_all_logs
 {
   for (@{$config->{log}}) {
+    if($config->{start}) {
+      # stop if we meet the start tag
+      last if grep { tag_to_str($config->{start}) eq tag_to_str($_) } @{$_->{tags}};
+    }
     format_log $_;
   }
 }
