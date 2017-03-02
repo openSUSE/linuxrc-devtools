@@ -68,4 +68,5 @@ add tag `sle12-6.8.0` to the existing `6.8`
 - after you submit something to the new branch, `git2log` will report `sle12-6.8.1` as new branch/version; etc.
 - trick question:
     - So if HEAD is tagged both with `6.8` **and** `sle12-6.8.0` - which version will `git2log --version` report?
-    - Answer: `6.8` if you are on branch `master`, `6.8.0` if you are on branch `sle12`.
+    - Answer: `6.8` if you are on branch `master`, `6.8.0` if you are on branch `sle12`. And after you submit some changes it will be `6.9` and `6.8.1` respectively.
+
