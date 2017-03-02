@@ -43,7 +43,7 @@ This way the submitted package can be made bitwise identical on every submission
 didn't change) - something the build service team is really happy about.
 
 `git2log --version` will report the current version you are working on. This is either `VERSION` from
-the tag if `HEAD` is tagged or `VERSION+1` (auto-incremented suitable) if `HEAD` is untagged.
+the tag if `HEAD` is tagged or `VERSION+1` (auto-incremented suitably) if `HEAD` is untagged.
 
 `git2log --branch` reports the branch you are working on. This is **not** necessarily the current git
 branch name but `BRANCH` from the last `BRANCH-VERSION` or `VERSION` (master branch) tag found. This way you can
@@ -66,4 +66,6 @@ branch name but `BRANCH` from the last `BRANCH-VERSION` or `VERSION` (master bra
 - create new tag: e.g. to branch off at version `6.8` and add a third number component,
 add tag `sle12-6.8.0` to the existing `6.8`
 - after you submit something to the new branch, `git2log` will report `sle12-6.8.1` as new branch/version; etc.
-
+- trick question:
+    - So if HEAD is tagged both with `6.8` **and** `sle12-6.8.0` - which version will `git2log --version` report?
+    - Answer: `6.8` if you are on branch `master`, `6.8.0` is you are on branch `sle12`.
