@@ -56,7 +56,7 @@ my $opt_max;
 my $opt_width = 66;
 my $opt_width_fuzz = 8;
 my $opt_sep_width = 68;
-my $opt_format = 'obs';		# obs, internal
+my $opt_format = 'internal';		# obs, internal
 
 GetOptions(
   'help'          => sub { usage 0 },
@@ -144,7 +144,7 @@ Create changelog and project version from git repo.
   --start START_TAG   Start with tag START_TAG.
   --max N             Write at most MAX long entries.
   --update            Write changelog or version only if FILE is outdated.
-  --format FORMAT     Write log using FORMAT. Supported FORMATs are 'obs' and 'internal'.
+  --format FORMAT     Write log using FORMAT. Supported FORMATs are 'internal' (default) and 'obs'.
   --width WIDTH       Reformat log entries to be max WIDTH chars wide.
   --fuzz FUZZ         Allow log lines to be up to FUZZ chars longer as WIDTH to avoid
                       line breaks leaving tiny bits on the last line.
@@ -599,8 +599,11 @@ sub format_log
 
     if(
       # $commit->{merge_ref} eq $commit0->{merge_ref} &&
-      $commit->{author} eq $commit0->{author} &&
-      ($commit->{date} eq $commit0->{date} || $opt_format eq 'internal')
+      (
+        $commit->{author} eq $commit0->{author} &&
+        $commit->{date} eq $commit0->{date}
+      )
+      || $opt_format eq 'internal'
     ) {
       unshift @{$commit0->{formatted}}, @{$commit->{formatted}};
       delete $commit->{formatted};
@@ -617,7 +620,7 @@ sub format_log
       push @{$commit->{formatted}}, $log->{tags}[0]{version};
     }
     else {
-      push @{$commit->{formatted}}, tag_to_str($log->{tags}[0]);
+      # push @{$commit->{formatted}}, tag_to_str($log->{tags}[0]);
     }
 
     last;
@@ -641,21 +644,29 @@ sub format_log
   for my $commit (@$commits) {
     next unless $commit->{formatted} && @{$commit->{formatted}};
 
-    $formated_log .= "-" x $opt_sep_width . "\n";
     if($opt_format eq 'obs') {
+      $formated_log .= "-" x $opt_sep_width . "\n";
       $formated_log .= format_date_obs($commit->{date});
     }
     else {
       $formated_log .= format_date_iso($commit->{date});
     }
-    my $auth = $commit->{author};
     if($opt_format eq 'obs') {
+      my $auth = $commit->{author};
       $auth =~ s/^.*<//;
       $auth =~ s/>.*$//;
+      # replace non-suse e-mail addresses with a generic one
+      if($auth !~ /\@(suse\.(com|cz|de)|opensuse\.org)$/) {
+        $auth = 'opensuse-packaging@opensuse.org'
+      }
+      $formated_log .= " - $auth\n\n";
     }
-    $formated_log .= " - $auth\n\n";
+    else {
+      $formated_log .= ":\t" . tag_to_str($log->{tags}[0]) . "\n";
+    }
 
     for (@{$commit->{formatted}}) {
+      s/^/\t/mg if $opt_format eq 'internal';
       $formated_log .= "$_\n";
     }
 
