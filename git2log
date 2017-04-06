@@ -406,6 +406,15 @@ sub add_head_tag
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 sub format_all_logs
 {
+  # check if start tag actually exists - if not, print nothing
+  if($config->{start}) {
+    my $tag_found;
+    for (@{$config->{log}}) {
+      $tag_found = 1, last if grep { tag_to_str($config->{start}) eq tag_to_str($_) } @{$_->{tags}};
+    }
+    return if !$tag_found;
+  }
+
   for (@{$config->{log}}) {
     if($config->{start}) {
       # stop if we meet the start tag
@@ -714,12 +723,14 @@ sub add_line_breaks
 }
 
 
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 sub raw_date_to_s
 {
   return (split / /, $_[0])[0];
 }
 
 
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # Tue Dec 31 23:59:59 UTC 2016
 sub format_date_obs
 {
@@ -734,6 +745,7 @@ sub format_date_obs
 }
 
 
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # 2016-12-31
 sub format_date_iso
 {
