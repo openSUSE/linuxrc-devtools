@@ -197,8 +197,10 @@ sub get_version
 
   my $tag = $config->{log}[0]{tags}[0];
 
-  $config->{version} = $tag->{version} if $tag->{version};
-  $config->{branch} = $tag->{branch} if $tag->{branch};
+  if($tag->{version}) {
+    $config->{version} = $tag->{version};
+    $config->{branch} = $tag->{branch};
+  }
 }
 
 
