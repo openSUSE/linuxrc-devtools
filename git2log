@@ -399,6 +399,9 @@ sub add_head_tag
 
   $tag->{version} =~ s/(\d+)$/$1 + 1/e;
 
+  # remember that the tag was generated
+  $config->{log}[0]{was_untagged} = 1;
+
   $config->{log}[0]{tags}[0] = $tag;
 }
 
@@ -527,7 +530,7 @@ sub format_log
       if(/^\@log\@/) {
         $para_cnt = 0;
         $commit->{clear} = 1;
-        $tagged_merges->{$commit->{merge_ref}} = 1 if $commit->{merge_ref};
+        $tagged_merges->{$commit->{merge_ref}} = 1 if $commit->{merge_ref} || $log->{was_untagged};
       }
       $_ = undef if $para_cnt;
     }
