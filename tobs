@@ -166,6 +166,8 @@ my $tmp = Tmp::new($opt_save_temp);
 my $tmpdir = $tmp->dir('package');
 my $tmpdir2 = $tmp->dir('testpackage');
 
+$ENV{PATH} = "/usr/bin:/bin:/usr/sbin:/sbin";
+
 get_rc;
 
 get_gitdata;
@@ -176,7 +178,7 @@ get_dist;
 
 exit do_sr if $opt_sr;
 
-chomp($config->{version} = `./git2log --version`);
+chomp($config->{version} = `git2log --version`);
 die "no version info\n" if $config->{version} eq "";
 
 my @s = map { s#^[^/]*/##; $_ } glob("package/*");
@@ -379,7 +381,7 @@ sub get_gitdata
 {
   die "no git repository found\n" unless -d '.git';
 
-  my $branch = `./git2log --branch`;
+  my $branch = `git2log --branch`;
 
   chomp $branch;
 
@@ -548,7 +550,7 @@ sub update_changelog
   my $changelog;
 
   if($config->{version} ne $config->{spec_version}) {
-    $changelog = `./git2log --changelog --format=obs --start=$config->{spec_version}`;
+    $changelog = `git2log --changelog --format=obs --start=$config->{spec_version}`;
 
     die "Version $config->{spec_version} not found in changelog\n" if $changelog eq "";
   }
