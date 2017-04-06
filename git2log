@@ -603,7 +603,7 @@ sub format_log
   }
 
   # step 6
-  # join commit messages with same date & author
+  # join commit messages with same author (# & date)
 
   my $commit0;
 
@@ -614,13 +614,16 @@ sub format_log
     if(
       # $commit->{merge_ref} eq $commit0->{merge_ref} &&
       (
-        $commit->{author} eq $commit0->{author} &&
-        $commit->{date} eq $commit0->{date}
+        $commit->{author} eq $commit0->{author}
+        # && $commit->{date} eq $commit0->{date}
       )
       || $opt_format eq 'internal'
     ) {
       unshift @{$commit0->{formatted}}, @{$commit->{formatted}};
       delete $commit->{formatted};
+    }
+    else {
+      $commit0 = $commit;
     }
   }
 
