@@ -132,7 +132,6 @@ sub usage;
 sub get_rc;
 sub get_gitdata;
 sub get_dist;
-sub get_parent_branch;
 sub update_spec;
 sub update_changelog;
 sub update_tag;
@@ -156,7 +155,6 @@ GetOptions(
   'delay=i'     => \$opt_delay,
   'try'         => \$opt_try,
   'test'        => \$opt_test,
-  'no-test'     => sub { $opt_test = 0 },
   'target=s'    => \$opt_target,
   'save-temp'   => \$opt_save_temp,
   'version'     => sub { print "$VERSION\n"; exit 0 },
@@ -178,22 +176,8 @@ get_dist;
 
 exit do_sr if $opt_sr;
 
-if(open my $f, 'VERSION') {
-  chomp($config->{version} = <$f>);
-  close $f;
-}
+chomp($config->{version} = `./git2log --version`);
 die "no version info\n" if $config->{version} eq "";
-
-my $changelog = "ChangeLog" if -f "ChangeLog";
-$changelog = "Changelog" if -f "Changelog";
-$changelog = "changelog" if -f "changelog";
-
-if($changelog && open my $f, $changelog) {
-  $config->{changelog} = [ <$f> ];
-  close $f;
-}
-
-die "missing changelog file\n" if !defined $config->{changelog};
 
 my @s = map { s#^[^/]*/##; $_ } glob("package/*");
 die "no source files\n" if !@s;
@@ -324,6 +308,8 @@ General options:
 
   --target TARGET           Choose config from section TARGET in config file.
   --try                     Don\'t actually do anything.
+  --test                    Submit to test project. A test project is just an alternative
+                            project defined in .tobsrc.
 
   --version                 Show tobs version.
   --save-temp               Keep temporary files.
@@ -336,21 +322,8 @@ Create submit request:
                             in devel project.
   --delay N                 Wait N seconds between polling for build results (default: 30).
 
-Submit to devel project (no --sr option given):
-
-  --test                    Assume we are in a sub-branch in git and submit to the special
-                            test project.
-  --no-test                 Assume we are in a sub-branch in git and submit to the usual
-                            devel project. This is not the opposite of --test!
-
-  Note 1: You are expected to create the necessary files running 'make archive' before
-  using tobs.
-
-  Note 2: If a branch is named starting with 'test', 'fate', 'bnc', or 'bsc', tobs assumes
-  you are in a sub-branch of the actual devel branch and looks up the config accordingly.
-  Also, it will submit the package to the test project.
-  If you are using either --test or --no-test, tobs will always assume you are in a sub-branch
-  and submit to the test project or devel project depending on the option chosen.
+Note: You are expected to create the necessary files running 'make archive' before
+using tobs.
 
 Configuration file:
 
@@ -365,6 +338,9 @@ Examples:
 
   # submit from current git dir to devel project
   tobs
+
+  # prepare everything but don't actually submit anything
+  tobs --try
 
   # create submit request from devel project to target project
   tobs --sr
@@ -403,34 +379,11 @@ sub get_gitdata
 {
   die "no git repository found\n" unless -d '.git';
 
-  my $branch;
+  my $branch = `./git2log --branch`;
 
-  if(open my $p, "git branch 2>/dev/null |") {
-    while(<$p>) {
-      if(/^\*\s+(\S+)/) {
-        $branch = $1;
-        last;
-      }
-    }
-    close $p;
-  }
+  chomp $branch;
 
-  # $branch = undef if $branch eq 'master';
-
-  # print "BRANCH $branch\n";
-
-  if(defined($opt_test) || $branch =~ /^(test|bnc|bsc|fate)/) {
-    my $b = get_parent_branch $branch;
-    if($b) {
-      if(defined($opt_test) && !$opt_test) {
-        $config->{branch} = $branch;
-      }
-      else {
-        $config->{testbranch} = $branch;
-      }
-      $branch = $b;
-    }
-  }
+  die "failed to determine branch\n" if !$branch;
 
   $config->{branch} = $branch;
 
@@ -452,23 +405,6 @@ sub get_gitdata
     }
     close $p;
   }
-}
-
-
-# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-sub get_parent_branch
-{
-  my $branch = shift;
-
-  my $p;
-
-  for (`git log -g --pretty=oneline`) {
-    $p = $1 if /checkout: moving from (\S+) to $branch/;
-  }
-
-  # print "parent = $p\n";
-
-  return $p;
 }
 
 
@@ -498,7 +434,8 @@ sub get_dist
 
   $config->{dist} = $dist->{dist};
   $config->{prj} = $dist->{prj};
-  if($config->{testbranch}) {
+  $config->{bs} = $dist->{bs};
+  if($opt_test) {
     if($dist->{test}) {
       $config->{test} = $dist->{test};
     }
@@ -506,7 +443,6 @@ sub get_dist
       die "no test project defined for $config->{package} in $config->{dist}\n";
     }
   }
-  $config->{bs} = $dist->{bs};
   $config->{sr} = $dist->{sr};
   $config->{sr} .= "/$config->{package}" if $config->{sr} && $config->{sr} !~ m#/#;
 
@@ -609,42 +545,15 @@ sub update_spec
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 sub update_changelog
 {
-  my %log;
-  my $cv;
-  my @vers;
-  my $start;
-  my $log;
+  my $changelog;
 
   if($config->{version} ne $config->{spec_version}) {
-    for (@{$config->{changelog}}) {
-      if(/^\S+:\s+v?(\S+)/) {
-        $cv = $1;
-        $cv =~ s/^.*\-//;
-        $cv =~ s/HEAD/$config->{version}/;
-        unshift @vers, $cv;
-        next;
-      }
-      if(!/^\s*$/) {
-        s/^\t//;
-        $log{$cv} .= $_;
-        next;
-      }
-    }
+    $changelog = `./git2log --changelog --format=obs --start=$config->{spec_version}`;
 
-    die "Version $config->{version} not found in changelog\n" unless $log{$config->{version}};
-    die "Version $config->{spec_version} not found in changelog\n" unless $log{$config->{spec_version}};
-
-    for (@vers) {
-      if($_ eq $config->{spec_version}) {
-        $start = 1;
-        next;
-      }
-      if($start) {
-        $log .= $log{$_};
-      }
-      last if $_ eq $config->{version};
-    }
+    die "Version $config->{spec_version} not found in changelog\n" if $changelog eq "";
   }
+
+  my $log;
 
   for (sort keys %{$config->{sources}}) {
     $log .= "- adding $_\n" if !$config->{rm_sources}{$_};
@@ -658,18 +567,15 @@ sub update_changelog
     $log .= "- removing patch $_\n";
   }
 
+  # insert at the end of the first log entry
   if($log) {
-    $log .= "- $config->{version}\n";
+    $changelog =~ s/(\n-[^\n]*\n)\n/$1$log\n/;
+  }
 
-    my $d = `LANGUAGE=C LC_ALL=C date`; chomp $d;
-    $log = "-" x 67 . "\n$d - $config->{email}\n\n" . $log . "\n";
+  if($changelog) {
+    unshift @{$config->{changes}}, $changelog;
 
-    $log =~ s/(bnc|bsc)\s*#/bsc#/ig;
-    $log =~ s/fate\s*#/fate#/ig;
-
-    unshift @{$config->{changes}}, $log;
-
-    print "New changelog entry:\n", $log, "-" x 67, "\n";
+    print "New changelog entry:\n", $changelog;
   }
 }
 
