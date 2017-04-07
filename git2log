@@ -119,8 +119,6 @@ if($opt_start) {
 
 format_all_logs;
 
-# print Dumper $config;
-
 open my $f, ">$opt_file";
 
 print $f $_->{formatted} for @{$config->{log}};
@@ -131,6 +129,13 @@ exit 0;
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# usage(exit_code)
+#
+# Print help message and exit.
+# - exit_code: exit code
+#
+# Function does not return.
+#
 sub usage
 {
   my $err = shift;
@@ -156,9 +161,13 @@ Create changelog and project version from git repo.
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# changelog_outdated(filename)
+# res = changelog_outdated(file)
 #
-# Return 1 if changelog is newer than the last git repo change and should be updated.
+# Return status of changelog file.
+# - file: changelog file name
+# - res: status
+#     1: file is newer than the last git repo change and should be updated
+#     0: file is still recent enough
 #
 # Relies on global var @changelog_deps.
 #
@@ -179,7 +188,9 @@ sub changelog_outdated
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Get github project name.
+# get_github_project()
+#
+# Set $config->{github_project} to the github project name.
 #
 sub get_github_project
 {
@@ -191,6 +202,14 @@ sub get_github_project
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# get_version()
+#
+# Set $config->{branch} and $config->{version} to the current branch and
+# version info.
+#
+# This might be taken directly from HEAD if HEAD is tagged or otherwise be
+# exprapolated from the most recent tag (cf. add_head_tag()).
+#
 sub get_version
 {
   $config->{version} = "0.0";
@@ -205,12 +224,18 @@ sub get_version
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Parses $config->{raw_log} and extracts tag names.
-#
-# Commit ids for tags are stored in $config->{tags} and (reversed) in
-# $config->{commits} (holds array of tags!).
-#
 # get_tags()
+#
+# Parse $config->{raw_log}, extract tag names, and split into per-tag
+# sections.
+#
+# Only tags recognized by is_formatted_tag() are considered.
+#
+# The parsed logs is stored in $config->{log}, an array of log sections.
+# Each section is a hash with these keys:
+#   - 'tags': array of tags for this section
+#   - 'commit': git commit id associated with these tags
+#   - 'lines': git log lines
 #
 sub get_tags
 {
@@ -248,26 +273,31 @@ sub get_tags
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Read git log and store lines as array in $config->{raw_log} (no trailing newlines).
-#
 # get_log()
+#
+# Read git log and store lines as array in $config->{raw_log} (trailing
+# newlines removed).
 #
 sub get_log
 {
   chomp(@{$config->{raw_log}} = `git log --pretty=medium --date=raw --topo-order --decorate`);
-  # chomp(@{$config->{raw_log}} = `cat foo`);
 }
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# hash_ref = is_formatted_tag(tag_name)
+#
 # Parse tag and return hash ref with branch and version number parts or
 # undef if it doesn't match.
+# - tag_name: tag as string
+# - hash_ref: hash ref with internal tag representation (with keys 'branch' and 'version').
 #
 # This expects tags of the form "VERSION" or "BRANCH-VERSION" where VERSION
 # consists of decimal numbers separated by dots '.' and BRANCH can be any
-# string (notably it doesn't have to be the name of any existing branch).
+# string.
+# (Note: it doesn't really have to be the name of an existing branch.)
 #
-# hash_ref = is_formatted_tag(tag_name)
+# Tags not conforming to this convention are ignored.
 #
 sub is_formatted_tag
 {
@@ -280,9 +310,11 @@ sub is_formatted_tag
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Get currently active branch and store in $config->{branch}.
-#
 # get_branch()
+#
+# Get currently active git branch and store in $config->{branch}.
+#
+# 'master' branch is represented by empty 'branch' key.
 #
 sub get_branch
 {
@@ -295,6 +327,15 @@ sub get_branch
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# res = tag_sort(a, b)
+#
+# Compare 2 tags.
+# - a, b: refs to tag hash
+# - res: -1, 0, 1
+#
+# This is used when we have to decide between alternative tags.
+# (Prefer 'lesser' variant.)
+#
 sub tag_sort
 {
   my ($x, $y);
@@ -310,8 +351,13 @@ sub tag_sort
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-#
 # str = tag_to_str(tag_ref)
+#
+# Convert tag into string.
+# - tag_ref: ref to hash with 'branch' and 'version' keys
+# - str: string (e.g. "foo-1.44")
+#
+# 'master' branch is represented by missing/empty 'branch' key.
 #
 sub tag_to_str
 {
@@ -326,8 +372,13 @@ sub tag_to_str
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-#
 # str = tags_to_str(tag_array_ref)
+#
+# Convert array of tags into string.
+# - tag_array_ref: ref to array of tags
+# - str: string (e.g. "(tag1, tag2)"
+#
+# This function is used only internally for debugging.
 #
 sub tags_to_str
 {
@@ -344,8 +395,11 @@ sub tags_to_str
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-#
 # choose_tags()
+#
+# Scan commit messages and extract tag & branch information.
+#
+# This stores the tag/branch info in $config->{log}[]{tags}.
 #
 sub choose_tags
 {
@@ -383,30 +437,43 @@ sub choose_tags
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# add_head_tag()
+#
 # Suggest tag for HEAD if there isn't one.
 #
 # Basically, use branch + version from most recent tag and increment version.
-#
-# add_head_tag()
 #
 sub add_head_tag
 {
   return if @{$config->{log}} < 2;
 
+  # HEAD tagged already?
   return if $config->{log}[0]{tags};
 
+  # the first tagged commit if HEAD isn't tagged
   my $tag = { %{$config->{log}[1]{tags}[0]} };
 
+  # increment version
   $tag->{version} =~ s/(\d+)$/$1 + 1/e;
+
+  $config->{log}[0]{tags}[0] = $tag;
 
   # remember that the tag was generated
   $config->{log}[0]{was_untagged} = 1;
-
-  $config->{log}[0]{tags}[0] = $tag;
 }
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# format_all_logs()
+#
+# Format the entire git log.
+#
+# This is done for every code version individually (the log has already been
+# split accordingly).
+#
+# If $config->{start} is set, use this as starting point. Else format the
+# entire git log.
+#
 sub format_all_logs
 {
   # check if start tag actually exists - if not, print nothing
@@ -429,6 +496,16 @@ sub format_all_logs
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# format_log(log)
+#
+# Format log messages.
+# - log: is an array ref with individual commits
+#
+# All commits belong to a specific code version (stored in $log->{tag}).
+# $log->{formatted} holds the result.
+#
+# The process is done in several individual steps, documented below in the code.
+#
 sub format_log
 {
   my $log = $_[0];
@@ -516,6 +593,9 @@ sub format_log
     push @{$commits}, $saved_commit;
   }
 
+  # Note: the individual steps below work on the array @$commits and modify
+  # its content.
+
   # step 1
   # - leave only first paragraph or paragraphs starting with '@log@' or '@+log@'
   # - tag commits that have a '@log@' tag
@@ -548,7 +628,7 @@ sub format_log
   }
 
   # step 3
-  # join lines
+  # - join lines
 
   for my $commit (@$commits) {
     my $lines;
@@ -577,7 +657,7 @@ sub format_log
   }
 
   # step 4
-  # fix small glitches
+  # - fix small glitches
 
   for my $commit (@$commits) {
     next unless $commit->{formatted};
@@ -603,7 +683,7 @@ sub format_log
   }
 
   # step 6
-  # join commit messages with same author (# & date)
+  # - join commit messages with same author (# & date)
 
   my $commit0;
 
@@ -644,7 +724,7 @@ sub format_log
   }
 
   # step 8
-  # add line breaks
+  # - add line breaks
 
   for my $commit (@$commits) {
     next unless $commit->{formatted};
@@ -654,7 +734,10 @@ sub format_log
   }
 
   # step 9
-  # generate final log message
+  # - generate final log message
+  #
+  # note: non-(open)suse email addresses are replaced by a generic
+  # 'opensuse-packaging@opensuse.org'
 
   my $formated_log;
 
@@ -691,12 +774,20 @@ sub format_log
   }
 
   $log->{formatted} = $formated_log;
-
-  # print Dumper($commits);
 }
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# new_text = add_line_breaks(text)
+#
+# Add line breaks to text.
+# - text: some text
+# - new_text: same text, reformatted
+#
+# Lines are formatted to have a maximal length of $opt_width. If this causes
+# the last line to be shorter than $opt_width_fuzz, it is appended to the
+# previous line.
+#
 sub add_line_breaks
 {
   my @words = split /\s+/, @_[0];
@@ -730,6 +821,12 @@ sub add_line_breaks
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# seconds = raw_date_to_s(git_date)
+#
+# Convert git raw date to seconds.
+# - git_date: raw git format (e.g. "1443184889 +0200")
+# - seconds: the seconds part (e.g. "1443184889")
+#
 sub raw_date_to_s
 {
   return (split / /, $_[0])[0];
@@ -737,7 +834,12 @@ sub raw_date_to_s
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# Tue Dec 31 23:59:59 UTC 2016
+# date = format_date_obs(git_date)
+#
+# Convert git raw date to obs format.
+# - git_date: raw git format (e.g. "1443184889 +0200")
+# - date: obs format ("Fri Sep 25 12:41:29 UTC 2015")
+#
 sub format_date_obs
 {
   my @d = gmtime(raw_date_to_s($_[0]));
@@ -752,11 +854,15 @@ sub format_date_obs
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# 2016-12-31
+# date = format_date_iso(git_date)
+#
+# Convert git raw date to iso format.
+# - git_date: raw git format (e.g. "1443184889 +0200")
+# - date: obs format ("2015-09-25")
+#
 sub format_date_iso
 {
   my @d = gmtime(raw_date_to_s($_[0]));
 
   return sprintf("%04d-%02d-%02d", 1900 + $d[5], $d[4] + 1, $d[3]);
 }
-
