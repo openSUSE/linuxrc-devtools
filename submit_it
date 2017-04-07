@@ -2,17 +2,23 @@
 
 unset LANG
 
-if [ "$1" = "--dist" -o "$1" = "--target" ] ; then
-  dist="--target $2"
-  shift
-  shift
-fi
+while true; do
+  if [ "$1" = "--dist" -o "$1" = "--target" ] ; then
+    dist="--target $2"
+    shift
+    shift
+    continue
+  fi
 
-if [ "$1" = "--package" ] ; then
-  package="--package $2"
-  shift
-  shift
-fi
+  if [ "$1" = "--package" ] ; then
+    package="--package $2"
+    shift
+    shift
+    continue
+  fi
+
+  break
+done
 
 job_name=${JOB_NAME%-sr}
 

@@ -4,17 +4,23 @@ unset LANG
 
 branch=master
 
-if [ "$1" = "--dist" -o "$1" = "--target" ] ; then
-  dist="--target $2"
-  shift
-  shift
-fi
+while true ; do
+  if [ "$1" = "--dist" -o "$1" = "--target" ] ; then
+    dist="--target $2"
+    shift
+    shift
+    continue
+  fi
 
-if [ "$1" = "--branch" ] ; then
-  branch=$2
-  shift
-  shift
-fi
+  if [ "$1" = "--branch" ] ; then
+    branch=$2
+    shift
+    shift
+    continue
+  fi
+
+  break
+done
 
 if [ -n "$1" ] ; then
   branch=$1
