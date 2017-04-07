@@ -21,6 +21,9 @@ if [ -z "$job_name" -o "$job_name" = "$JOB_NAME" ] ; then
   exit 1
 fi
 
-cd "../$job_name"
+# we don't need git directory if package has been specified
+if [ -z "$package" ] ; then
+  cd "../$job_name"
+fi
 
 tobs --wait-for-ok --sr $dist $package
