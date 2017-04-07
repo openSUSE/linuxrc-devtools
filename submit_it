@@ -20,15 +20,15 @@ while true; do
   break
 done
 
-job_name=${JOB_NAME%-sr}
-
-if [ -z "$job_name" -o "$job_name" = "$JOB_NAME" ] ; then
-  echo "$JOB_NAME: unexpected job"
-  exit 1
-fi
-
-# we don't need git directory if package has been specified
+# we need neither git directory nor JOB_NAME if package has been specified
 if [ -z "$package" ] ; then
+  job_name=${JOB_NAME%-sr}
+
+  if [ -z "$job_name" -o "$job_name" = "$JOB_NAME" ] ; then
+    echo "$JOB_NAME: unexpected job"
+    exit 1
+  fi
+
   cd "../$job_name"
 fi
 
