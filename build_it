@@ -2,14 +2,23 @@
 
 unset LANG
 
+branch=master
+
 if [ "$1" = "--dist" -o "$1" = "--target" ] ; then
   dist="--target $2"
   shift
   shift
 fi
 
-branch=master
-[ -n "$1" ] && branch=$1
+if [ "$1" = "--branch" ] ; then
+  branch=$2
+  shift
+  shift
+fi
+
+if [ -n "$1" ] ; then
+  branch=$1
+fi
 
 clean_target=clean
 grep -q -s distclean: Makefile* && clean_target=distclean
