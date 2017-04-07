@@ -2,7 +2,7 @@
 
 unset LANG
 
-if [ "$1" = "--dist" ] ; then
+if [ "$1" = "--dist" -o "$1" = "--target" ] ; then
   dist="--target $2"
   shift
   shift

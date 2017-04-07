@@ -2,8 +2,14 @@
 
 unset LANG
 
-if [ "$1" = "--dist" ] ; then
+if [ "$1" = "--dist" -o "$1" = "--target" ] ; then
   dist="--target $2"
+  shift
+  shift
+fi
+
+if [ "$1" = "--package" ] ; then
+  package="--package $2"
   shift
   shift
 fi
@@ -17,4 +23,4 @@ fi
 
 cd "../$job_name"
 
-tobs --wait-for-ok --sr $dist
+tobs --wait-for-ok --sr $dist $package
