@@ -148,6 +148,7 @@ my $opt_try;
 my $opt_test;
 my $opt_delay = 30;
 my $opt_target;
+my $opt_package;
 
 GetOptions(
   'sr'          => \$opt_sr,
@@ -156,6 +157,7 @@ GetOptions(
   'try'         => \$opt_try,
   'test'        => \$opt_test,
   'target=s'    => \$opt_target,
+  'package=s'   => \$opt_package,
   'save-temp'   => \$opt_save_temp,
   'version'     => sub { print "$VERSION\n"; exit 0 },
   'help'        => sub { usage 0 },
@@ -170,7 +172,12 @@ $ENV{PATH} = "/usr/bin:/bin:/usr/sbin:/sbin";
 
 get_rc;
 
-get_gitdata;
+if($opt_package) {
+  $config->{package} = $opt_package;
+}
+else {
+  get_gitdata;
+}
 
 usage 1 unless $config->{package};
 
@@ -310,8 +317,9 @@ General options:
 
   --target TARGET           Choose config from section TARGET in config file.
   --try                     Don\'t actually do anything.
-  --test                    Submit to test project. A test project is just an alternative
-                            project defined in .tobsrc.
+  --test                    Submit to test project. A test project is an alternative
+                            project defined in .tobsrc. Sources are taken from the regular
+                            project but the new code is submitted to the test project.
 
   --version                 Show tobs version.
   --save-temp               Keep temporary files.
@@ -323,6 +331,10 @@ Create submit request:
   --wait-for-ok             Wait until package has built ok on at least one architecture
                             in devel project.
   --delay N                 Wait N seconds between polling for build results (default: 30).
+  --package PACKAGE         Set package name to PACKAGE. If this option is missing, the
+                            package name is determined from the checked out git repository.
+                            If you use this option you must also specify a TARGET with
+                            the --target option.
 
 Note: You are expected to create the necessary files running 'make archive' before
 using tobs.
@@ -417,7 +429,7 @@ sub get_dist
 
   for (@{$config->{rc}}) {
     next if $opt_target && $_->{dist} ne $opt_target;
-    if($_->{branch} eq $config->{branch}) {
+    if($_->{branch} eq $config->{branch} || $opt_target) {
       # when git repo  and package name differ...
       if($_->{package} ne "" && $_->{gitname} eq $config->{package}) {
         $config->{package} = $_->{package};
@@ -432,7 +444,7 @@ sub get_dist
     }
   }
 
-  die "no config for $config->{branch}\n" unless $dist;
+  die "no config for " . ($opt_target ? $opt_target : $config->{branch}) . "\n" unless $dist;
 
   $config->{dist} = $dist->{dist};
   $config->{prj} = $dist->{prj};
@@ -599,7 +611,6 @@ sub update_tag
 sub do_sr
 {
   print "      Package: $config->{package}\n";
-  print "   GIT Branch: $config->{branch}\n";
   print "         Dist: $config->{dist}\n";
   print "      Project: $config->{prj}\n";
   print " Test Project: $config->{test}\n" if $config->{test};
@@ -610,7 +621,7 @@ sub do_sr
   my $err = 0;
 
   if($config->{test}) {
-    print "\nNo submit requests for test builds!\n";
+    print "\n===  No submit requests from test projects!  ===\n";
     return $err;
   }
 
