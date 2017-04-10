@@ -121,6 +121,24 @@ service package, not the git repo name.
 Similar to first example but build service package names differ in devel
 project and target project (e.g. you have several `*.spec` files).
 
+If the submit request should go to a different buildservice than the one
+where the project was built, use the 'bs_sr' entry to specify the build
+service for the sr and the prefix to access one bs from the other.
+
+For example:
+
+    [sle12]
+    branch=master
+    prj=system:install:head
+    test=home:xxx:factory
+    sr=SUSE:SLE-12:Update
+    bs=api.opensuse.org
+    bs_sr=api.foo.bar,openSUSE.org:
+
+Sources are built in system:install:head on api.opensuse.org but the result
+is submitted from openSUSE.org:system:install:head to SUSE:SLE-12:Update on
+api.foo.bar.
+
 ### build_it
 
   Wrapper script for _tobs_ to be run by Jenkins.

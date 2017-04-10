@@ -449,6 +449,7 @@ sub get_dist
   $config->{dist} = $dist->{dist};
   $config->{prj} = $dist->{prj};
   $config->{bs} = $dist->{bs};
+  $config->{bs_sr} = $dist->{bs_sr};
   if($opt_test) {
     if($dist->{test}) {
       $config->{test} = $dist->{test};
@@ -610,13 +611,20 @@ sub update_tag
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 sub do_sr
 {
+  my $bs = $config->{bs};
+  my $bs_prefix;
+
+  if($config->{bs_sr}) {
+    ($bs, $bs_prefix) = split /,/, $config->{bs_sr};
+  }
+
   print "      Package: $config->{package}\n";
   print "         Dist: $config->{dist}\n";
-  print "      Project: $config->{prj}\n";
-  print " Test Project: $config->{test}\n" if $config->{test};
+  print "      Project: $bs_prefix$config->{prj}\n";
+  print " Test Project: $bs_prefix$config->{test}\n" if $config->{test};
   print "    Submit To: $config->{sr}\n";
   print "   Maintainer: $config->{email}\n";
-  print "           BS: $config->{bs}\n";
+  print "           BS: $bs\n";
 
   my $err = 0;
 
@@ -638,7 +646,7 @@ sub do_sr
 
     do {
       sleep $delay;
-      if(open my $p, "osc -A https://$config->{bs} r --csv $config->{prj} $s[1] |") {
+      if(open my $p, "osc -A https://$bs r --csv $bs_prefix$config->{prj} $s[1] |") {
         while (<$p>) {
           chomp;
           my @i = split /\|/;
@@ -693,7 +701,7 @@ sub do_sr
     my $sr_resp = $tmp->file();
     my $user = $config->{email};
     $user =~ s/\@.*$//;
-    system "echo y | osc -A https://$config->{bs} sr -m 'submitted by $user via jenkins' --yes --nodevelproject $config->{prj} $s[1] $s[0] >$sr_resp 2>&1";
+    system "echo y | osc -A https://$bs sr -m 'submitted by $user via jenkins' --yes --nodevelproject $bs_prefix$config->{prj} $s[1] $s[0] >$sr_resp 2>&1";
     $err = $? >> 8;
 
     my $resp_msg;
