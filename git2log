@@ -723,7 +723,7 @@ sub format_log
     next unless $commit->{formatted};
 
     if($opt_format eq 'obs') {
-      push @{$commit->{formatted}}, $log->{tags}[0]{version};
+      push @{$commit->{formatted}}, $log->{tags}[0]{version} if defined $log->{tags}[0]{version};
     }
     else {
       # push @{$commit->{formatted}}, tag_to_str($log->{tags}[0]);
