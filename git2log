@@ -605,16 +605,24 @@ sub format_log
   # its content.
 
   # step 1
-  # - leave only first paragraph or paragraphs starting with '@log@' or '@+log@'
-  # - tag commits that have a '@log@' tag
+  # - if there are paragraphs starting with '@log@' or '@+log@'
+  #     - delete first paragraph (short summary)
+  # - else
+  #     - keep only first paragraph
+  # - if there is a paragraph starting with '@-log', delete entire log
+  # - tag commits that have a '@log@' tag so we can delete untagged commits
+  #   belonging to the same merge commit later
 
   my $tagged_merges = {};
 
   for my $commit (@$commits) {
     my $para_cnt = 0;
+    my $delete_all = 0;
+    my $delete_first = 0;
     for (@{$commit->{lines}}) {
       $para_cnt++ if $_ eq "";
-      $para_cnt = 0 if /^\@\+log\@/;
+      $para_cnt = 0, $delete_first = 1 if /^\@\+log\@/;
+      $delete_all = 1 if /^\@\-log\@/;
       if(/^\@log\@/) {
         $para_cnt = 0;
         $commit->{clear} = 1;
@@ -622,6 +630,8 @@ sub format_log
       }
       $_ = undef if $para_cnt;
     }
+    shift @{$commit->{lines}} if $delete_first;
+    $commit->{lines} = [] if $delete_all;
   }
 
   # step 2

@@ -22,14 +22,20 @@ A git commit message consists of a single line (summary) followed by any number 
 The log will be created from git commit messages in this way:
 
 Usually only the first line (the summary) is used. But to ease concerns that the git commit messages
-are not suited for a changelog, you can tag paragraphs by starting them with `@log@` or `@+log@`.
+are not suited for a changelog, you can tag paragraphs by starting them with `@log@` or `@+log@` or `@-log@`.
 
-These paragraphs are then added to the changelog.
+if there are no paragraphs starting with `@log@` or `@+log@` or `@-log@`, the log message is build
+using the first line of the commit message.
 
-The difference between them is that `@log@` will cause all summary lines of the commit (possibly
-a merge commit as for pull requests) to be ignored. `@+log@` will just **add** the paragraph.
+If there is a paragraph starting with `@-log@`, the entire commit message is ignored.
 
-So, use `@log@` to rewite the changelog of a pull request, `@+log@` to add some additional log.
+If there are paragraphs starting them with `@log@` or `@+log@`, only these are used for the changelog.
+
+The difference between `@log@` and `@+log@` is that `@log@` will cause all summary lines of the commit (possibly
+a merge commit as for pull requests) to be ignored. `@+log@` will just add the paragraph.
+
+So, use `@log@` to rewite the changelog of a pull request, `@+log@` to add some additional log, and
+`@-log@` to just skip a commit message.
 You can write several `@log@` and `@+log@` entries. All will be combined.
 
 Log entries are reformatted (line breaks) to fit within a max line length. Also, version numbers
