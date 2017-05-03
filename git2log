@@ -58,6 +58,7 @@ my $opt_width_fuzz = 8;
 my $opt_sep_width = 68;
 my $opt_format = 'internal';		# obs, internal
 my $opt_merge_msg_before = 1;		# log auto generated pr merge message before the commit messages (vs. after)
+my $opt_join_author = 1;		# join consecutive commit messages as long as they are by the same author
 
 GetOptions(
   'help'          => sub { usage 0 },
@@ -70,6 +71,7 @@ GetOptions(
   'width=i'       => \$opt_width,
   'fuzz=i'        => \$opt_width_fuzz,
   'merge-msg=s'   => sub { $opt_merge_msg_before = ($_[1] eq 'after' ? 0 : 1) },
+  'join-author!'  => \$opt_join_author,
   'log|changelog' => \$opt_log,
 ) || usage 1;
 
@@ -157,6 +159,8 @@ Create changelog and project version from git repo.
                       line breaks leaving tiny bits on the last line.
   --merge-msg WHERE   Log message about merges before or after the actual merge commit messages.
                       Valid values for WHERE are 'after' and 'before' (default).
+  --join-author       Join consecutive commits as long as they are by the same author. (default)
+  --no-join-author    Keep consecutive commits by the same author separate.
   --help              Print this help text.
   usage
 
@@ -703,7 +707,7 @@ sub format_log
     if(
       # $commit->{merge_ref} eq $commit0->{merge_ref} &&
       (
-        $commit->{author} eq $commit0->{author}
+        $opt_join_author && ($commit->{author} eq $commit0->{author})
         # && $commit->{date} eq $commit0->{date}
       )
       || $opt_format eq 'internal'
