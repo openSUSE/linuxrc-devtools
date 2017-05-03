@@ -168,7 +168,7 @@ my $tmp = Tmp::new($opt_save_temp);
 my $tmpdir = $tmp->dir('package');
 my $tmpdir2 = $tmp->dir('testpackage');
 
-$ENV{PATH} = "/usr/bin:/bin:/usr/sbin:/sbin";
+$ENV{PATH} = "$ENV{HOME}/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
 get_rc;
 
