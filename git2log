@@ -57,6 +57,7 @@ my $opt_width = 66;
 my $opt_width_fuzz = 8;
 my $opt_sep_width = 68;
 my $opt_format = 'internal';		# obs, internal
+my $opt_merge_msg_before = 1;		# log auto generated pr merge message before the commit messages (vs. after)
 
 GetOptions(
   'help'          => sub { usage 0 },
@@ -68,6 +69,7 @@ GetOptions(
   'max=i'         => \$opt_max,
   'width=i'       => \$opt_width,
   'fuzz=i'        => \$opt_width_fuzz,
+  'merge-msg=s'   => sub { $opt_merge_msg_before = ($_[1] eq 'after' ? 0 : 1) },
   'log|changelog' => \$opt_log,
 ) || usage 1;
 
@@ -153,6 +155,8 @@ Create changelog and project version from git repo.
   --width WIDTH       Reformat log entries to be max WIDTH chars wide.
   --fuzz FUZZ         Allow log lines to be up to FUZZ chars longer as WIDTH to avoid
                       line breaks leaving tiny bits on the last line.
+  --merge-msg WHERE   Log message about merges before or after the actual merge commit messages.
+                      Valid values for WHERE are 'after' and 'before' (default).
   --help              Print this help text.
   usage
 
@@ -667,17 +671,22 @@ sub format_log
   }
 
   # step 5
-  # - add merge info at the top
+  # - add merge info at the top or bottom (depending on $opt_merge_msg_before)
 
   my $merge_logged;
 
-  for my $commit (@$commits) {
+  for my $commit ($opt_merge_msg_before ? reverse(@$commits) : @$commits) {
     next unless $commit->{formatted};
 
     if($commit->{merge_ref} && !$merge_logged->{$commit->{merge_ref}}) {
       $merge_logged->{$commit->{merge_ref}} = 1;
       if($commit->{merge_msg}) {
-        unshift @{$commit->{formatted}}, $commit->{merge_msg};
+        if($opt_merge_msg_before) {
+          unshift @{$commit->{formatted}}, $commit->{merge_msg};
+        }
+        else {
+          push @{$commit->{formatted}}, $commit->{merge_msg};
+        }
       }
     }
   }
