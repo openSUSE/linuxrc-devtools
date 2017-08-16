@@ -189,6 +189,7 @@ chomp($config->{version} = `git2log --version`);
 die "no version info\n" if $config->{version} eq "";
 
 my @s = map { s#^[^/]*/##; $_ } glob("package/*");
+@s = grep { !/\.changes$/ } @s;
 die "no source files\n" if !@s;
 
 $config->{archive} = "$config->{package}-$config->{version}.tar";
