@@ -1,4 +1,4 @@
-#! /bin/bash
+#! /bin/bash -e
 
 unset LANG
 
@@ -19,6 +19,13 @@ while true ; do
     continue
   fi
 
+  if [ "$1" = "--prepare" ] ; then
+    prepare="$2"
+    shift
+    shift
+    continue
+  fi
+
   break
 done
 
@@ -26,22 +33,28 @@ if [ -n "$1" ] ; then
   branch=$1
 fi
 
-clean_target=clean
-grep -q -s distclean: Makefile* && clean_target=distclean
-
 git status
 git checkout $branch
 git pull
 
-make $clean_target
+if [ -z "$prepare" ] ; then
+  clean_target=clean
+  grep -q -s distclean: Makefile* && clean_target=distclean
 
-if [ -d package ] ; then
-  echo 'old archive files found!'
-  exit 1
+  make $clean_target
+
+  if [ -d package ] ; then
+    echo 'old archive files found!'
+    exit 1
+  fi
+
+  make archive
+else
+  $prepare
 fi
-
-make archive
 
 tobs $dist
 
-make $clean_target
+if [ -z "$prepare" ] ; then
+  make $clean_target
+fi
