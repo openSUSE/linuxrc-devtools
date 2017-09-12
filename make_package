@@ -23,6 +23,10 @@ while true ; do
 done
 
 if [ -z "$PACKAGE_NAME" ] ; then
+  PACKAGE_NAME=$(git config --get remote.origin.url | perl -pe 's#^.*/|\.git$##g')
+fi
+
+if [ -z "$PACKAGE_NAME" ] ; then
   echo no package name set
   exit 1
 fi
