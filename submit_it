@@ -2,6 +2,8 @@
 
 unset LANG
 
+wait_opt=--wait-for-ok
+
 while true; do
   if [ "$1" = "--dist" -o "$1" = "--target" ] ; then
     dist="--target $2"
@@ -13,6 +15,12 @@ while true; do
   if [ "$1" = "--package" ] ; then
     package="--package $2"
     shift
+    shift
+    continue
+  fi
+
+  if [ "$1" = "--no-wait" ] ; then
+    wait_opt=
     shift
     continue
   fi
@@ -32,4 +40,4 @@ if [ -z "$package" ] ; then
   cd "../$job_name"
 fi
 
-tobs --wait-for-ok --sr $dist $package
+tobs $wait_opt --sr $dist $package

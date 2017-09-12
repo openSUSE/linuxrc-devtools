@@ -26,6 +26,13 @@ while true ; do
     continue
   fi
 
+  if [ "$1" = "--spec" ] ; then
+    spec_opt="--spec $2"
+    shift
+    shift
+    continue
+  fi
+
   break
 done
 
@@ -53,7 +60,7 @@ else
   $prepare
 fi
 
-tobs $dist
+tobs $spec_opt $dist
 
 if [ -z "$prepare" ] ; then
   make $clean_target
