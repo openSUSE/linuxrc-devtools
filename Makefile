@@ -1,5 +1,5 @@
 PACKAGE := linuxrc-devtools
-SCRIPTS := build_it git2log git2tags submit_it tobs
+SCRIPTS := build_it git2log git2tags submit_it tobs make_package
 
 GIT2LOG := $(shell if [ -x ./git2log ] ; then echo ./git2log --update ; else echo true ; fi)
 GITDEPS := $(shell [ -d .git ] && echo .git/HEAD .git/refs/heads .git/refs/tags)
