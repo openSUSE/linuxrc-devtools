@@ -264,8 +264,10 @@ if(open my $f, ">$tmpdir/$config->{package}/$config->{spec_name}.spec") {
 
 update_changelog;
 
+my $new_changelog = "$tmpdir/$config->{package}/$config->{spec_name}.changes";
+
 # write new changes file
-if(open my $f, ">$tmpdir/$config->{package}/$config->{spec_name}.changes") {
+if(open my $f, ">$new_changelog") {
   print $f @{$config->{changes}};
   close $f;
 }
@@ -276,8 +278,10 @@ for ($config->{rm_archive}, keys %{$config->{rm_sources}}, keys %{$config->{rm_p
   unlink "$tmpdir/$config->{package}/$_";
 }
 
-# copy new files
+# copy new files except *.changes (we would overwrite our newly generated one)
+rename $new_changelog, "$new_changelog.tmp";
 system "cp package/* $tmpdir/$config->{package}/";
+rename "$new_changelog.tmp", $new_changelog;
 
 # copy changes and specs
 if(@specs > 1) {
