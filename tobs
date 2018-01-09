@@ -644,6 +644,17 @@ sub update_tag
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Wait for OBS build results and submit package if we got a positive result.
+#
+# We loop until we see a positive build result or we're sure the OBS is not
+# building anymore.
+#
+# The package build is considered ok if there's at least a single positive
+# build at this point. If not, it has failed.
+#
+# Note that failed builds do not worry us as many projects are set up to
+# build several targets and not all of them are expected to work.
+#
 sub do_sr
 {
   my $bs = $config->{bs};
@@ -682,6 +693,15 @@ sub do_sr
     do {
       sleep $delay;
       if(open my $p, "osc -A https://$bs r --csv $bs_prefix$config->{prj} $s[1] |") {
+        # sample line:
+        #
+        # openSUSE_Factory|x86_64|unpublished|False|succeeded|
+        #
+        # field 0, 1, 2: not relevant
+        # field 3: False or True; if True, state is going to change
+        # field 4: status
+        # field 5: sometimes a 6th field is added with the real state
+        #
         while (<$p>) {
           chomp;
           my @i = split /\|/;
@@ -698,12 +718,20 @@ sub do_sr
             $i[3] eq "False" &&
             (
               $i[4] eq "failed" ||
+              $i[4] eq "unresolvable" ||
+              $i[4] eq "broken" ||
               $i[4] eq "finished" && $i[5] eq "failed"
             )
           ) {
             $failed = 1;
           }
-          else {
+          elsif(
+            $i[3] eq "False" &&
+            !(
+              $i[4] eq "excluded" ||
+              $i[4] eq "disabled"
+            )
+          ) {
             $building = 1;
           }
         }
