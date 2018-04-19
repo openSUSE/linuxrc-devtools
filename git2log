@@ -514,11 +514,14 @@ sub fix_dates
     if(/^(Date:\s+)(\S+)(\s+\S+)/) {
       if(defined $last_date && $2 < $last_date) {
         $_ = "$1$last_date$3\n";
-        next;
       }
+      else {
+        $last_date = $2;
+      }
+
+      # ensure a minimal time gap of 1 second
+      $last_date += 1;
     }
-    # ensure a minimal time gap of 1 second
-    $last_date = $2 + 1;
   }
 }
 
