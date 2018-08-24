@@ -590,7 +590,6 @@ sub format_log
 
   my $merge;
   my $commit;
-  my $saved_commit;
   my $commits;
 
   for (@{$log->{lines}}) {
@@ -608,67 +607,57 @@ sub format_log
       if($merge) {
         $commit->{merge_ref} = $merge->{ref};
         $commit->{date} = $merge->{date};
+        $commit->{author} = $merge->{author};
         # add to all commits so it's not lost when we re-arrange
-        $commit->{merge_msg} = $merge->{msg} if $merge->{msg};
-        # saved entry no longer needed
-        undef $saved_commit;
+        $commit->{merge_msg} = $merge->{msg};
       }
 
       next;
     }
 
-    if(/^Merge: (\S+)/) {
+    if(/^Merge: (\S+)/ && !$merge) {
       if($commit) {
         $merge = { merge_end => $1, ref => $commit->{ref} } unless $merge;
-        $saved_commit = pop @{$commits};
       }
-      undef $commit;
       next;
     }
 
     if(/^Date:\s+(\S.*)/) {
-      if($commit) {
-        $commit->{date} = $1 if !$commit->{date};
-      }
-      elsif($merge) {
-        $merge->{date} = $1 if !$merge->{date};
-      }
+      $commit->{date} ||= $1 if $commit;
+      $merge->{date} ||= $1 if $merge;
       next;
     }
 
     if(/^Author:\s+(\S.*)/) {
-      $commit->{author} = $1 if $commit;
-      $merge->{author} = $1 if $merge && !$merge->{author};
+      $commit->{author} ||= $1 if $commit;
+      $merge->{author} ||= $1 if $merge;
       next;
     }
 
-    if($commit) {
-      push @{$commit->{lines}}, $_ if s/^    //;
-    }
-    elsif($merge && !$merge->{msg}) {
+    if($merge) {
       if(/^    Merge pull request (#\d+) from (\S+)/) {
         if($config->{github_project}) {
-          $merge->{msg} = "merge gh#$config->{github_project}$1";
+          push @{$merge->{msg}}, "merge gh#$config->{github_project}$1";
         }
         else {
-          $merge->{msg} = "merge pr $2";
+          push @{$merge->{msg}}, "merge pr $2";
         }
       }
-      elsif(/^    Merge branch '([^']+)'/) {
-        $merge->{msg} = "merge branch $1";
+      elsif(/^    Merge branch '([^']+)'( into)?/) {
+        push @{$merge->{msg}}, "merge branch $1" if $2 eq "";
+      }
+      elsif(/^    Merge remote-tracking branch /) {
+        # ignore
+      }
+      elsif(s/^    //) {
+        push @{$commit->{lines}}, $_ unless /^# /;
       }
     }
-  }
-
-  # it can happen that there's a lonely merge commit left at the end
-  if($merge && $saved_commit) {
-    $saved_commit->{merge_ref} = $merge->{ref};
-    $saved_commit->{date} = $merge->{date};
-    $saved_commit->{author} = $merge->{author};
-    $saved_commit->{merge_msg} = $merge->{msg} if $merge->{msg};
-    $saved_commit->{formatted} = [];
-
-    push @{$commits}, $saved_commit;
+    elsif($commit) {
+      if(s/^    //) {
+        push @{$commit->{lines}}, $_ unless /^# /;
+      }
+    }
   }
 
   # Note: the individual steps below work on the array @$commits and modify
@@ -686,6 +675,11 @@ sub format_log
   my $tagged_merges = {};
 
   for my $commit (@$commits) {
+    # skip leading empty lines
+    for (@{$commit->{lines}}) {
+      last if !/^\s*$/;
+      shift @{$commit->{lines}};
+    }
     my $para_cnt = 0;
     my $delete_all = 0;
     my $delete_first = 0;
@@ -750,7 +744,7 @@ sub format_log
   for my $commit (@$commits) {
     next unless $commit->{formatted};
     for (@{$commit->{formatted}}) {
-      s/(fate|bnc|bsc)\s*(#\d+)/\L$1\E$2/ig;
+      s/(fate|bnc|bsc|boo)\s*(#\d+)/\L$1\E$2/ig;
     }
   }
 
@@ -766,10 +760,10 @@ sub format_log
       $merge_logged->{$commit->{merge_ref}} = 1;
       if($commit->{merge_msg}) {
         if($opt_merge_msg_before) {
-          unshift @{$commit->{formatted}}, $commit->{merge_msg};
+          unshift @{$commit->{formatted}}, @{$commit->{merge_msg}};
         }
         else {
-          push @{$commit->{formatted}}, $commit->{merge_msg};
+          push @{$commit->{formatted}}, @{$commit->{merge_msg}};
         }
       }
     }
@@ -817,6 +811,15 @@ sub format_log
   }
 
   # step 8
+  # - remove identical lines
+
+  for my $commit (@$commits) {
+    next unless $commit->{formatted};
+    my %k;
+    $commit->{formatted} = [ grep { !$k{$_}++ } @{$commit->{formatted}} ]
+  }
+
+  # step 9
   # - add line breaks
 
   for my $commit (@$commits) {
@@ -826,7 +829,7 @@ sub format_log
     }
   }
 
-  # step 9
+  # step 10
   # - generate final log message
   #
   # note: non-(open)suse email addresses are replaced by $opt_default_email
