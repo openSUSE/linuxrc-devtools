@@ -820,6 +820,27 @@ sub format_log
   }
 
   # step 9
+  # - remove shortened lines (that match the beginning of other lines)
+
+  for my $commit (@$commits) {
+    next unless $commit->{formatted};
+
+    # return 1 if some other commit line starts with function arg
+    my $is_substr = sub {
+      my $str = $_[0];
+      $str =~ s/\s*…$//;	# github likes to shorten lines with ' …'
+      my $str_len = length $str;
+      for (@{$commit->{formatted}}) {
+        return 1 if $str_len < length($_) && $str eq substr($_, 0, $str_len);
+      }
+
+      return 0;
+    };
+
+    $commit->{formatted} = [ grep { ! $is_substr->($_) } @{$commit->{formatted}} ]
+  }
+
+  # step 10
   # - add line breaks
 
   for my $commit (@$commits) {
@@ -829,7 +850,7 @@ sub format_log
     }
   }
 
-  # step 10
+  # step 11
   # - generate final log message
   #
   # note: non-(open)suse email addresses are replaced by $opt_default_email
