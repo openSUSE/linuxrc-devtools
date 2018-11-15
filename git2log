@@ -166,7 +166,7 @@ Create changelog and project version from git repo.
   --version           Write version number to FILE.
   --branch            Write current branch to FILE.
   --start START_TAG   Start with tag START_TAG.
-  --max N             Write at most MAX long entries.
+  --max N             Write at most N log entries.
   --update            Write changelog or version only if FILE is outdated.
   --format FORMAT     Write log using FORMAT. Supported FORMATs are 'internal' (default) and 'obs'.
   --width WIDTH       Reformat log entries to be max WIDTH chars wide.
