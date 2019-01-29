@@ -744,7 +744,7 @@ sub format_log
   for my $commit (@$commits) {
     next unless $commit->{formatted};
     for (@{$commit->{formatted}}) {
-      s/(fate|bnc|bsc|boo)\s*(#\d+)/\L$1\E$2/ig;
+      s/(fate|bnc|bsc|boo|jsc)\s*(#[a-z\d\-]+)/\L$1\E$2/ig;
     }
   }
 
