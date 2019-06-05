@@ -534,14 +534,22 @@ sub update_spec
     }
 
     if(/^Name:(\s*)(\S+)/) {
-      $spec_name = $2;
+      # Be careful: if there are several 'Name:' lines don't do fancy stuff
+      # as we are not sure which one is correct (think of %if's in the
+      # spec).
+      if(defined $spec_name) {
+        $spec_name = '';
+      }
+      else {
+        $spec_name = $2;
+      }
     }
 
     if(/^Source:(\s*)((\S+)\.tar\.(bz2|gz|xz))/) {
       $config->{rm_archive} = $2;
       my $s = $1;
       my $n = $config->{archive};
-      $config->{rm_archive} =~ s/%\{name\}/$spec_name/g;
+      $config->{rm_archive} =~ s/%\{name\}/$spec_name/g if $spec_name ne '';
       $config->{rm_archive} =~ s/%\{version\}/$spec_version/g;
       $n =~ s/^$spec_name\-/%\{name\}-/ if $spec_name ne '';
       $n =~ s/\-$config->{version}\.tar/-%\{version\}.tar/ if $spec_version ne "";
