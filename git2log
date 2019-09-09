@@ -33,6 +33,7 @@ sub format_log;
 sub format_all_logs;
 sub fix_dates;
 sub add_line_breaks;
+sub add_bugzilla_to_weblate;
 sub format_date_obs;
 sub format_date_iso;
 sub raw_date_to_s;
@@ -62,6 +63,7 @@ my $opt_merge_msg_before = 1;		# log auto generated pr merge message before the 
 my $opt_join_author = 1;		# join consecutive commit messages as long as they are by the same author
 my $opt_keep_date = 1;			# don't join consecutive commit messages if they have different time stamps
 my $opt_default_email = 'opensuse-packaging@opensuse.org';	# default email to use in changelog
+my $opt_weblate = 'bsc#1149754';	# bugzilla ref to use for Weblate commits
 
 GetOptions(
   'help'          => sub { usage 0 },
@@ -78,6 +80,7 @@ GetOptions(
   'keep-date!'    => \$opt_keep_date,
   'log|changelog' => \$opt_log,
   'default-email=s' => \$opt_default_email,
+  'weblate=s'     => \$opt_weblate,
 ) || usage 1;
 
 # ensure we are used correctly
@@ -180,6 +183,7 @@ Create changelog and project version from git repo.
   --no-keep-date      Join consecutive commits even if dates differ.
   --default-email     Use this email in changelog entries if no other suitable email could be
                       determined (default: opensuse-packaging\@opensuse.org).
+  --weblate STRING    Add this STRING to every auto-generated Weblate commit.
   --help              Print this help text.
   usage
 
@@ -841,6 +845,16 @@ sub format_log
   }
 
   # step 10
+  # - add bugzilla reference to Weblate commits
+
+  for my $commit (@$commits) {
+    next unless $commit->{formatted};
+    for (@{$commit->{formatted}}) {
+      $_ = add_bugzilla_to_weblate $_;
+    }
+  }
+
+  # step 11
   # - add line breaks
 
   for my $commit (@$commits) {
@@ -850,7 +864,7 @@ sub format_log
     }
   }
 
-  # step 11
+  # step 12
   # - generate final log message
   #
   # note: non-(open)suse email addresses are replaced by $opt_default_email
@@ -933,6 +947,27 @@ sub add_line_breaks
   }
 
   return "- " . $str;
+}
+
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# new_text = add_bugzilla_to_weblate(text)
+#
+# Add bugzilla number to an auto-generated Weblate commit.
+# - text: some text
+# - new_text: same text, "($opt_weblate)" added
+#
+sub add_bugzilla_to_weblate
+{
+  my $text = @_[0];
+
+  if($opt_weblate ne "") {
+    if($text =~ /Translated using Weblate/ && $text !~ /\($opt_weblate\)/) {
+      $text .= " ($opt_weblate)";
+    }
+  }
+
+  return $text;
 }
 
 
