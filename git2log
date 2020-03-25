@@ -481,8 +481,8 @@ sub choose_tags
     # If a commit is tagged  "FOO-X.Y" *and* "FOO-X.Y.0" assume the user
     # wants to start a new sub-numbering scheme.
     #
-    # Use "X.Y" as version but remember to go to "X.Y.1" when we need to
-    # increment the version.
+    # Use "X.Y" as version but remember to go to "X.Y.1" instead of
+    # "X.{Y+1}" when we need to increment the version.
     #
     my $version = $t[0]{version};
     if($version =~ s/\.0$//) {
