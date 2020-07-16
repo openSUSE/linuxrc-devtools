@@ -150,6 +150,7 @@ my $opt_delay = 30;
 my $opt_target;
 my $opt_package;
 my $opt_spec;
+my $opt_obs;
 
 GetOptions(
   'sr'          => \$opt_sr,
@@ -160,6 +161,7 @@ GetOptions(
   'target=s'    => \$opt_target,
   'package=s'   => \$opt_package,
   'spec=s'      => \$opt_spec,
+  'obs=s'       => \$opt_obs,
   'save-temp'   => \$opt_save_temp,
   'version'     => sub { print "$VERSION\n"; exit 0 },
   'help'        => sub { usage 0 },
@@ -207,6 +209,7 @@ print "      Package: $config->{package}\n";
 print "      Version: $config->{version}\n";
 print "   GIT Branch: $config->{branch}\n";
 print "    Spec File: $opt_spec\n" if $opt_spec;
+print "  OBS Sources: $opt_obs\n" if $opt_obs;
 print "         Dist: $config->{dist}\n";
 print "      Project: $config->{prj}\n";
 print " Test Project: $config->{test}\n" if $config->{test};
@@ -239,6 +242,15 @@ if($opt_spec) {
     close $f;
   }
 }
+elsif($opt_obs) {
+  if(open my $f, "$opt_obs/$config->{spec_name}.spec") {
+    $config->{spec_file_alt} = [ <$f> ];
+    close $f;
+  }
+  else {
+    die "spec file missing: $opt_obs/$config->{spec_name}.spec\n";
+  }
+}
 
 if(open my $f, "$tmpdir/$config->{package}/$config->{spec_name}.spec") {
   $config->{spec_file} = [ <$f> ];
@@ -253,6 +265,11 @@ if(open my $f, "$tmpdir/$config->{package}/$config->{spec_name}.changes") {
 }
 
 die "missing changes\n" if !defined $config->{changes};
+
+# copy OBS files
+if($opt_obs) {
+  system "cp $opt_obs/* $tmpdir/$config->{package}/"
+}
 
 update_spec;
 
@@ -333,6 +350,8 @@ General options:
   --target TARGET           Choose config from section TARGET in config file.
   --spec FILE               Use FILE as spec file template instead of the spec file from
                             the build service project.
+  --obs DIR                 Commit everything in DIR to OBS. Note that *.changes is still
+                            automatically created.
   --try                     Don\'t actually do anything.
   --test                    Submit to test project. A test project is an alternative
                             project defined in .tobsrc. Sources are taken from the regular
