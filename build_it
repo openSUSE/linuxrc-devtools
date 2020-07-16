@@ -33,6 +33,13 @@ while true ; do
     continue
   fi
 
+  if [ "$1" = "--obs" ] ; then
+    obs_opt="--obs $2"
+    shift
+    shift
+    continue
+  fi
+
   break
 done
 
@@ -60,7 +67,7 @@ else
   $prepare
 fi
 
-tobs $spec_opt $dist
+tobs $spec_opt $obs_opt $dist
 
 if [ -z "$prepare" ] ; then
   make $clean_target
