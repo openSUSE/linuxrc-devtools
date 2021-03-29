@@ -787,11 +787,45 @@ sub do_sr
 
   print "Creating submit request to $config->{sr}\n";
 
+  # get list of existing requests, most recent first
+  my $requests;
+
+  if(open my $p, "osc -A https://$bs request list $s[0]/$s[1] |") {
+    while(<$p>) {
+      if(/^(\d+)\s+State:(\S+)/) {
+        unshift @$requests, { id => $1, state => $2 };
+        next;
+      }
+      if($requests && /^\s*Review by Project\s.*\:Staging\:/) {
+        $requests->[0]{staging} = 1;
+        next;
+      }
+    }
+    close $p;
+  }
+
+  # if the most recent request is a review in staging, don't replace it
+
+  my $answer = "y";
+  my $super_id;
+
+  if($requests) {
+    $super_id = $requests->[0]{id};
+    if($requests->[0]{state} eq "review" && $requests->[0]{staging}) {
+      $answer = "n";
+      print "Not superseding staging request \#$super_id\n";
+    }
+    else {
+      print "Superseding exsting request \#$super_id\n";
+    }
+  }
+
   if(!$opt_try) {
     my $sr_resp = $tmp->file();
     my $user = $config->{email};
+    my $s_opt = $super_id && $answer eq "y" ? "-s $super_id" : "";
     $user =~ s/\@.*$//;
-    system "echo y | osc -A https://$bs sr -m 'submitted by $user via jenkins' --yes --nodevelproject $bs_prefix$config->{prj} $s[1] $s[0] >$sr_resp 2>&1";
+    system "echo $answer | osc -A https://$bs sr -m 'submitted by $user via jenkins' $s_opt --nodevelproject $bs_prefix$config->{prj} $s[1] $s[0] >$sr_resp 2>&1";
     $err = $? >> 8;
 
     my $resp_msg;
