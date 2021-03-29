@@ -37,7 +37,14 @@ PACKAGE_PREFIX=$PACKAGE_NAME-$VERSION
 mkdir -p package
 rm -f package/*.tar.xz package/*.changes
 
+extra_files=VERSION
+
 git2log --changelog --format obs package/$PACKAGE_NAME.changes
+
+if [ -f changelog ] || grep -q ^changelog: Makefile ; then
+  git2log --changelog changelog
+  extra_files="$extra_files changelog"
+fi
 
 if [ ! -d .git ] ; then
   echo no git repo
@@ -49,5 +56,5 @@ git archive --prefix=$PACKAGE_PREFIX/ HEAD > package/$PACKAGE_PREFIX.tar
 tar -r -f package/$PACKAGE_PREFIX.tar \
   --mode=0664 --owner=root --group=root \
   --mtime="`git show -s --format=%ci`" \
-  --transform="s:^:$PACKAGE_PREFIX/:" VERSION
+  --transform="s:^:$PACKAGE_PREFIX/:" $extra_files
 xz -f package/$PACKAGE_PREFIX.tar
