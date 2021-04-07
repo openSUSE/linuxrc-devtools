@@ -272,24 +272,40 @@ sub get_version
 #
 sub get_tags
 {
-  my $log_entry;
-
-  # the end of the merge commit if in a merge
-  my $merge;
+  my $pre_parsed;
+  my $current;
 
   for (@{$config->{raw_log}}) {
     if(/^commit (\S+)( \((.*)\))?/) {
-      my $commit = $1;
-      my $tag_list = $3;
-      my $xtag;
+      $current = { commit => $1, tag_list => $3 };
+      push @$pre_parsed, $current;
+    }
 
-      # we have reached the end of the merge commit
-      undef $merge if $merge && $commit =~ /^$merge/;
+    next if !defined $current;
 
-      # ignore tag info inside a merge commit
-      $tag_list = "" if $merge;
+    if(/^Merge: (\S+) (\S+)/) {
+      $current->{merge_end} = $1;
+      $current->{merge_start} = $2;
+    }
 
-      for my $t (split /, /, $tag_list) {
+    push @{$current->{lines}}, $_;
+  }
+
+  # the end of the merge commit if in a merge
+  my $merge;
+  my $log_entry;
+
+  for my $p (@$pre_parsed) {
+    my $xtag;
+
+    # we have reached the end of the merge commit
+    if((defined($merge) && $p->{commit} =~ /^$merge/) || (!defined($merge) && $p->{merge_end})) {
+      undef $merge;
+    }
+
+    # ignore tag info inside a merge commit
+    if(!$merge) {
+      for my $t (split /, /, $p->{tag_list}) {
         if($t =~ /tag: (\S+)/) {
           my $tag = $1;
           my $x = is_formatted_tag $tag;
@@ -297,23 +313,27 @@ sub get_tags
         }
       }
 
-      if($xtag) {
-        if($log_entry) {
-          push @{$config->{log}}, $log_entry;
-          last if $opt_max && @{$config->{log}} >= $opt_max;
-        }
-        $log_entry = { commit => $commit, tags => $xtag };
+      if($p->{merge_end}) {
+        # remember end of current merge commit
+        $merge = $p->{merge_end};
       }
-      else {
-        $log_entry = { commit => $commit } if !$log_entry;
-      }
-    }
-    elsif(!$merge && /^Merge: (\S+)/) {
-      # remember end of merge
-      $merge = $1;
     }
 
-    push @{$log_entry->{lines}}, $_ if $log_entry;
+    if(!$log_entry) {
+      $log_entry = { commit => $p->{commit} };
+      $log_entry->{tags} = $xtag if $xtag;
+      push @{$config->{log}}, $log_entry;
+    }
+    else {
+      if($xtag) {
+        $log_entry = { commit => $p->{commit}, tags => $xtag };
+        push @{$config->{log}}, $log_entry;
+      }
+    }
+
+    push @{$log_entry->{lines}}, @{$p->{lines}};
+
+    last if $opt_max && @{$config->{log}} >= $opt_max;
   }
 }
 
