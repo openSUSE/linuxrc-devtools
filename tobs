@@ -602,11 +602,6 @@ sub update_spec
       }
       else {
         $setup = 1;
-        my $i = 1;
-        for my $x (keys %{$config->{sources}}) {
-          $_ .= "%setup -T -D -a $i\n";
-          $i++;
-        }
       }
     }
   }
