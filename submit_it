@@ -5,15 +5,15 @@ unset LANG
 wait_opt=--wait-for-ok
 
 while true; do
-  if [ "$1" = "--dist" -o "$1" = "--target" ] ; then
-    dist="--target $2"
+  if [ "$1" = "--target" ] ; then
+    target="--target $2"
     shift
     shift
     continue
   fi
 
-  if [ "$1" = "--package" ] ; then
-    package="--package $2"
+  if [ "$1" = "--sr" ] ; then
+    sr="--sr $2"
     shift
     shift
     continue
@@ -28,16 +28,4 @@ while true; do
   break
 done
 
-# we need neither git directory nor JOB_NAME if package has been specified
-if [ -z "$package" ] ; then
-  job_name=${JOB_NAME%-sr}
-
-  if [ -z "$job_name" -o "$job_name" = "$JOB_NAME" ] ; then
-    echo "$JOB_NAME: unexpected job"
-    exit 1
-  fi
-
-  cd "../$job_name"
-fi
-
-tobs $wait_opt --sr $dist $package
+tobs $wait_opt $target $sr
