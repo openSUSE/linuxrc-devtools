@@ -5,8 +5,8 @@ unset LANG
 branch=master
 
 while true ; do
-  if [ "$1" = "--dist" -o "$1" = "--target" ] ; then
-    dist="--target $2"
+  if [ "$1" = "--target" ] ; then
+    target="--target $2"
     shift
     shift
     continue
@@ -43,10 +43,6 @@ while true ; do
   break
 done
 
-if [ -n "$1" ] ; then
-  branch=$1
-fi
-
 git status
 git checkout $branch
 git pull
@@ -67,7 +63,7 @@ else
   $prepare
 fi
 
-tobs $spec_opt $obs_opt $dist
+tobs $target $spec_opt $obs_opt
 
 if [ -z "$prepare" ] ; then
   make $clean_target

@@ -1,0 +1,183 @@
+# Linuxrc development tools
+
+This is a collection of scripts used to connect http://github.com[Github]
+via http://jenkins-ci.org[Jenkins] to the https://build.opensuse.org[Open Build Service].
+
+For these to work the git project must fulfill some requirements:
+
+* there must be a `clean` or `distclean` make target that really cleans up
+  everything
+* there must be an `archive` target that creates a source tar file (details see
+  below)
+
+## Tools
+
+### git2log
+
+Generate a changelog file based on git commit messages.
+
+If your commit message is split into a single line short comment and a
+detailed description separated by an empty line, just the short comment is
+used. Alternatively, precede each commit line with a dash '-' to get
+multiple changelog entries.
+
+Expects numerical tags matching version number, like 1.2.3. For branches !=
+master, tags should be `<branch>-<version>`.
+
+You can create test branches from any main branch (e.g. for pull requests,
+with `git co -b`). _git2log_ recognizes those branches and treats them as
+continuation of the main branch.
+
+### tobs
+
+Sample usage (submit current git state to `foo:bar:devel` devel project in
+open build service:
+
+```
+tobs --target obs://foo:bar:devel
+```
+
+You can append a package name to the target spec, like:
+
+```
+tobs --target obs://foo:bar:devel/zap
+```
+
+This is useful if the git repository name and the package name differ.
+
+There must be a make target `archive` that has created:
+
+* a `VERSION` file
+* a `changelog` file
+* a source archive `package/<name>-<version>.tar.xz`
+* optionally other source files (that will be mentioned in `+*.spec+`) below `package/`
+
+Ideally, repeated make runs should produce exactly the same archive file as
+long as the git repo stays unchanged.
+
+The script gets the current build service package, updates it with the new
+sources, adjust the `+*.spec+` file to remove any old patches, updates the
+`+*.changes+` file and commits the new package back to the build service (to the
+same project). It will auto-add comments about removed patches and
+removed/added source files.
+
+If it does not yet exist it creates a new version number tag in the git
+repo.
+
+Note that you need a `$HOME/.oscrc` file with sufficient authentication info
+to access the build service and to write to the git repo (to push the tag).
+
+There is a `--try` option that does everything except actually submitting
+the changes to the build service or setting the new tag. Use together with
+`--save-temp` to debug things.
+
+#### tobs --sr
+
+Sample usage (wait for the package to build sucessfully in `foo:bar:devel`,
+then submit to `openSUSE:Factory`):
+
+```
+tobs --target obs://foo:bar:devel --sr obs://openSUSE:Factory --wait-for-ok
+```
+
+If you use the `--sr` option _tobs_ will create a build service submit request.
+With `--wait-for-ok` it optionally waits until the package has been built
+successfully in the development project.
+
+#### $HOME/.tobsrc
+
+_tobs_ uses a config file with basic data about the open build service. It
+can also have a list of aliases for bvuild service projects.
+
+It uses ini-file syntax.
+
+Sample file:
+
+```
+[obs]
+api=api.opensuse.org
+
+[xbs]
+api=api.example.org
+prefix[obs]=openSUSE.org
+
+[aliases]
+factory=obs://openSUSE:Factory
+devel-factory=obs://foo:bar:devel
+```
+
+This means
+
+- `obs` refers to api.opensuse.org
+- `xbs` refers to api.example.org
+- `obs` can be accessed via `xbs` by using an `openSUSE.org` prefix to project names
+- `factory` and `devel-factory` can be used as aliases in _tobs_ to specify projects; this means
++
+--
+```
+tobs --target devel-factory --sr factory
+```
+would be equivalent to
+```
+tobs --target obs://foo:bar:devel --sr obs://openSUSE:Factory
+```
+--
+
+### build_it
+
+Wrapper script for _tobs_ to be run by Jenkins.
+
+For example
+
+```
+build_it --target obs://foo:bar:devel --branch main
+```
+
+checks out branch `main`, runs `make archive`, and then `tobs` to submit the package.
+
+
+### submit_it
+
+Wrapper script for `tobs --sr` to be run by Jenkins.
+
+For example
+
+```
+submit_it --target obs://foo:bar:devel/zap --sr obs://openSUSE:Factory
+```
+
+Waits for package `zap` to be built at `foo:bar:devel` and then submits to `openSUSE:Factory`.
+
+## openSUSE development
+
+### Workflow
+
+At a first glance, Linuxrc (and related projects) follows the same approach as other YaST projects:
+changes are tracked on Github and Jenkins CI will take care of submitting them to OBS. However,
+tools used by these projects are different from the ones used for YaST.
+
+Those tools are available in http://github.com/openSUSE/linuxrc-devtools[linuxrc-devtools].
+Next we'll introduce them (and how are they related to Jenkins) but it's recommended to check the
+https://github.com/openSUSE/linuxrc-devtools/blob/master/README.adoc[documentation]
+in the repository.
+
+When Jenkins detect changes on, for example,
+http://github.com/openSUSE/linuxrc[linuxrc] Git repository, it will build the
+project using the
+https://github.com/openSUSE/linuxrc-devtools/blob/master/build_it[build_it] script.
+This script is just a wrapper that, after building the `make archive` target,
+will invoke
+https://github.com/openSUSE/linuxrc-devtools/blob/master/tobs[tobs] which
+will take care of submitting the new version to the development project on OBS.
+
+If the previous step ran successfully, then a submit request to the final
+project will be created through the
+https://github.com/openSUSE/linuxrc-devtools/blob/master/submit_it[submit_it] script,
+which is just another wrapper script that will rely on `tobs`.
+
+### linuxrc-devtools
+
+The package is automatically submitted from the `master` branch to
+https://build.opensuse.org/package/show/system:install:head/linuxrc-devtools[system:install:head]
+OBS project. From that place it is forwarded to
+https://build.opensuse.org/project/show/openSUSE:Factory[openSUSE Factory].

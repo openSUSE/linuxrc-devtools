@@ -130,8 +130,9 @@ our $VERSION = "0.0";
 
 sub usage;
 sub get_rc;
-sub get_gitdata;
-sub get_dist;
+sub get_git_branch_and_tags;
+sub get_git_package;
+sub get_target;
 sub update_spec;
 sub update_changelog;
 sub update_tag;
@@ -145,21 +146,17 @@ my $opt_sr;
 my $opt_wait;
 my $opt_save_temp;
 my $opt_try;
-my $opt_test;
 my $opt_delay = 30;
 my $opt_target;
-my $opt_package;
 my $opt_spec;
 my $opt_obs;
 
 GetOptions(
-  'sr'          => \$opt_sr,
+  'sr=s'        => \$opt_sr,
   'wait-for-ok' => \$opt_wait,
   'delay=i'     => \$opt_delay,
   'try'         => \$opt_try,
-  'test'        => \$opt_test,
   'target=s'    => \$opt_target,
-  'package=s'   => \$opt_package,
   'spec=s'      => \$opt_spec,
   'obs=s'       => \$opt_obs,
   'save-temp'   => \$opt_save_temp,
@@ -170,31 +167,22 @@ GetOptions(
 my $tmp = Tmp::new($opt_save_temp);   
 
 my $tmpdir = $tmp->dir('package');
-my $tmpdir2 = $tmp->dir('testpackage');
 
 $ENV{PATH} = "$ENV{HOME}/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
 get_rc;
-
-if($opt_package) {
-  $config->{package} = $opt_package;
-}
-else {
-  get_gitdata;
-}
-
-usage 1 unless $config->{package};
-
-get_dist;
+get_target;
 
 exit do_sr if $opt_sr;
+
+get_git_branch_and_tags;
 
 chomp($config->{version} = `git2log --version`);
 die "no version info\n" if $config->{version} eq "";
 
 my @s = map { s#^[^/]*/##; $_ } glob("package/*");
 @s = grep { !/\.changes$/ } @s;
-die "no source files\n" if !@s;
+die "no source files; maybe run 'make archive'\n" if !@s;
 
 $config->{archive} = "$config->{package}-$config->{version}.tar";
 for (sort @s) {
@@ -210,10 +198,7 @@ print "      Version: $config->{version}\n";
 print "   GIT Branch: $config->{branch}\n";
 print "    Spec File: $opt_spec\n" if $opt_spec;
 print "  OBS Sources: $opt_obs\n" if $opt_obs;
-print "         Dist: $config->{dist}\n";
 print "      Project: $config->{prj}\n";
-print " Test Project: $config->{test}\n" if $config->{test};
-print "    Submit To: $config->{sr}\n";
 print "   Maintainer: $config->{email}\n";
 print "           BS: $config->{bs}\n";
 print "      TMP Dir: $tmpdir\n";
@@ -221,14 +206,6 @@ print "      TMP Dir: $tmpdir\n";
 print "Checking out $config->{prj}/$config->{package}...\n";
 system "cd $tmpdir ; osc -A https://$config->{bs} co -c $config->{prj}/$config->{package} >/dev/null";
 system "ls -og $tmpdir/$config->{package} | tail -n +2";
-
-if($config->{test}) {
-  print "Checking out $config->{test}/$config->{package}...\n";
-  if(system "cd $tmpdir2 ; osc -A https://$config->{bs} co -c $config->{test}/$config->{package} >/dev/null") {
-    die "missing test project $config->{test}/$config->{package}\n"
-  }
-  # system "ls -og $tmpdir2/$config->{package} | tail -n +2";
-}
 
 my @specs = map { s#.*/##; s#\.spec$##; $_ } glob("$tmpdir/$config->{package}/*.spec");
 if(@specs) {
@@ -314,24 +291,12 @@ if(@specs > 1) {
 }
 
 # create new tag if needed
-update_tag if !$config->{test};
+update_tag;
 
-# updating bs project
-if($config->{test}) {
-  system "rm -f $tmpdir2/$config->{package}/*";
-  system "cp -a $tmpdir/$config->{package}/* $tmpdir2/$config->{package}/";
-
-  system "cd $tmpdir2/$config->{package} ; osc -A https://$config->{bs} addremove";
-  print "Submitting changes to $config->{test}/$config->{package}...\n";
-  system "cd $tmpdir2/$config->{package} ; osc -A https://$config->{bs} ci -m '- release $config->{version}'" if !$opt_try;
-  system "ls -og $tmpdir2/$config->{package} | tail -n +2";
-}
-else {
-  system "cd $tmpdir/$config->{package} ; osc -A https://$config->{bs} addremove";
-  print "Submitting changes to $config->{prj}/$config->{package}...\n";
-  system "cd $tmpdir/$config->{package} ; osc -A https://$config->{bs} ci -m '- release $config->{version}'" if !$opt_try;
-  system "ls -og $tmpdir/$config->{package} | tail -n +2";
-}
+system "cd $tmpdir/$config->{package} ; osc -A https://$config->{bs} addremove";
+print "Submitting changes to $config->{prj}/$config->{package}...\n";
+system "cd $tmpdir/$config->{package} ; osc -A https://$config->{bs} ci -m '- release $config->{version}'" if !$opt_try;
+system "ls -og $tmpdir/$config->{package} | tail -n +2";
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -347,23 +312,25 @@ Submit from git to build system.
 
 General options:
 
-  --target TARGET           Choose config from section TARGET in config file.
+  --target TARGET           Submit to TARGET.
+                            TARGET has the form BS://PROJECT[/PACKAGE], where:
+                            BS is the section name of the open build service api server,
+                            as specified in .tobsrc,
+                            PROJECT ist the project name,
+                            PACKAGE is the (optional) package name - in case it does not
+                            match the git project name.
   --spec FILE               Use FILE as spec file template instead of the spec file from
                             the build service project.
   --obs DIR                 Commit everything in DIR to OBS. Note that *.changes is still
                             automatically created.
   --try                     Don\'t actually do anything.
-  --test                    Submit to test project. A test project is an alternative
-                            project defined in .tobsrc. Sources are taken from the regular
-                            project but the new code is submitted to the test project.
-
   --version                 Show tobs version.
   --save-temp               Keep temporary files.
   --help                    Write this help text.
 
 Create submit request:
 
-  --sr                      Create submit request from devel project to target project.
+  --sr BS://PROJECT         Create submit request.
   --wait-for-ok             Wait until package has built ok on at least one architecture
                             in devel project.
   --delay N                 Wait N seconds between polling for build results (default: 30).
@@ -381,19 +348,19 @@ Configuration file:
 
   Typical .ini style with entries in key=value form and section names in brackets ('[]').
 
-  Section names are arbitrary but can be thought of as target distribution.
+  Section names are used for the BS part in the TARGET specification.
   See README for some config entry examples.
 
 Examples:
 
-  # submit from current git dir to devel project
-  tobs
+  # submit from current git dir to foo:bar:devel project
+  tobs --target obs://foo:bar:devel
 
-  # prepare everything but don't actually submit anything
-  tobs --try
+  # the same, but don't actually submit the package
+  tobs --try --target obs://foo:bar:devel
 
-  # create submit request from devel project to target project
-  tobs --sr
+  # create submit request from devel project foo:bar:devel to openSUSE:Factory
+  tobs --target obs://foo:bar:devel --sr obs://openSUSE:Factory
 
 = = = = = = = =
 
@@ -405,27 +372,36 @@ Examples:
 sub get_rc
 {
   my $sec;
-  my @sections;
 
   if(open my $f, "$ENV{HOME}/.tobsrc") {
     while(<$f>) {
       if(/^\s*\[(\S+)\]/) {
-        push @sections, $sec = { dist => $1 };
+        $sec = {};
+        $config->{rc}{$1} = $sec;
         next;
       }
 
-      $sec->{$1} = $2 if /^\s*(\S+)\s*=\s*(\S+)/;
+      next unless $sec;
+
+      if(/^\s*(\S+)\s*=\s*(\S+)/) {
+        my $key = $1;
+        my $val = $2;
+        if($key =~ /^(\S+)\[(\S+)\]$/) {
+          $sec->{$1}{$2} = $val;
+        }
+        else {
+          $sec->{$key} = $val;
+        }
+      }
     }
 
     close $f;
   }
-
-  $config->{rc} = \@sections;
 }
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-sub get_gitdata
+sub get_git_branch_and_tags
 {
   die "no git repository found\n" unless -d '.git';
 
@@ -436,17 +412,6 @@ sub get_gitdata
   die "failed to determine branch\n" if !$branch;
 
   $config->{branch} = $branch;
-
-  my $pack = `git config --get remote.origin.url 2>/dev/null`;
-
-  if($pack =~ m#([^/.]+)\.git\s*$#) {
-    $pack = $1;
-  }
-  elsif($pack =~ m#([^/.]+?)\s*$#) {
-    $pack = $1;
-  }
-
-  $config->{package} = $pack if $pack ne "";
 
   if(open my $p, "git tag 2>/dev/null |") {
     while(<$p>) {
@@ -459,43 +424,57 @@ sub get_gitdata
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-sub get_dist
+sub get_git_package
 {
-  my $dist;
+  die "no git repository found\n" unless -d '.git';
 
-  for (@{$config->{rc}}) {
-    next if $opt_target && $_->{dist} ne $opt_target;
-    if($_->{branch} eq $config->{branch} || $opt_target) {
-      # when git repo  and package name differ...
-      if($_->{package} ne "" && $_->{gitname} eq $config->{package}) {
-        $config->{package} = $_->{package};
-        $dist = $_;
-        last;
-      }
-      elsif($_->{package} eq $config->{package}) {
-        $dist = $_;
-        last;
-      }
-      $dist = $_, last if !$_->{package};
-    }
+  my $pack = `git config --get remote.origin.url 2>/dev/null`;
+
+  if($pack =~ m#([^/.]+)\.git\s*$#) {
+    $pack = $1;
+  }
+  elsif($pack =~ m#([^/.]+?)\s*$#) {
+    $pack = $1;
   }
 
-  die "no config for " . ($opt_target ? $opt_target : $config->{branch}) . "\n" unless $dist;
+  $config->{package} = $pack if $pack ne "";
+}
 
-  $config->{dist} = $dist->{dist};
-  $config->{prj} = $dist->{prj};
-  $config->{bs} = $dist->{bs};
-  $config->{bs_sr} = $dist->{bs_sr};
-  if($opt_test) {
-    if($dist->{test}) {
-      $config->{test} = $dist->{test};
-    }
-    else {
-      die "no test project defined for $config->{package} in $config->{dist}\n";
-    }
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+sub get_target
+{
+  die "target spec missing; use --target option\n" if !$opt_target;
+
+  my $bs_name;
+
+  $config->{package} = $2 if $opt_sr =~ s#([^/])/([^/]+)$#$1#;
+  $config->{package} = $2 if $opt_target =~ s#([^/])/([^/]+)$#$1#;
+
+  $opt_sr = $config->{rc}{aliases}{$opt_sr} if $config->{rc}{aliases}{$opt_sr};
+  $opt_target = $config->{rc}{aliases}{$opt_target} if $config->{rc}{aliases}{$opt_target};
+
+  if($opt_target =~ m#^([^:]+)://([^/]+)$#) {
+    $bs_name = $1;
+    $config->{bs} = $config->{rc}{$bs_name}{api};
+    $config->{prj} = $2;
   }
-  $config->{sr} = $dist->{sr};
-  $config->{sr} .= "/$config->{package}" if $config->{sr} && $config->{sr} !~ m#/#;
+  else {
+    die "invalid target spec: $opt_target\n";
+  }
+
+  if($opt_sr =~ m#^([^:]+)://([^/]+)$#) {
+    $config->{sr}{api} = $config->{rc}{$1}{api};
+    my $pref = $config->{rc}{$1}{prefix}{$bs_name};
+    $config->{sr}{prefix} = "$pref:" if defined $pref;
+    $config->{sr}{prj} = $2;
+  }
+
+  get_git_package if !$config->{package};
+
+  if(!$config->{prj} || !$config->{package} || !$config->{bs}) {
+    die "incomplete config\n  project = $config->{prj}\n  package = $config->{package}\n  api = $config->{bs}\n";
+  }
 
   if($ENV{USER_NAME}) {
     $config->{email} = $ENV{USER_NAME};
@@ -514,7 +493,6 @@ sub get_dist
   }
 
   $config->{email} = (getpwuid $<)[0] if !$config->{email};
-
   $config->{email} .= "\@suse.com" if $config->{email} !~ /\@/;
 }
 
@@ -679,29 +657,19 @@ sub update_tag
 #
 sub do_sr
 {
-  my $bs = $config->{bs};
-  my $bs_prefix;
-
-  if($config->{bs_sr}) {
-    ($bs, $bs_prefix) = split /,/, $config->{bs_sr};
-  }
+  my $sr = $config->{sr};
 
   print "      Package: $config->{package}\n";
-  print "         Dist: $config->{dist}\n";
-  print "      Project: $bs_prefix$config->{prj}\n";
-  print " Test Project: $bs_prefix$config->{test}\n" if $config->{test};
-  print "    Submit To: $config->{sr}\n";
+  print "      Project: $sr->{prefix}$config->{prj}\n";
+  print "    Submit To: $sr->{prj}\n";
   print "   Maintainer: $config->{email}\n";
-  print "           BS: $bs\n";
+  print "           BS: $sr->{api}\n";
 
-  my $err = 0;
-
-  if($config->{test}) {
-    print "\n===  No submit requests from test projects!  ===\n";
-    return $err;
+  if($sr->{api} ne $config->{bs} && !$sr->{prefix}) {
+    die "submitting from $config->{bs} to $sr->{api} not possible\n";
   }
 
-  my @s = split '/', $config->{sr};
+  my $err = 0;
 
   if($opt_wait) {
     my $ok;
@@ -709,12 +677,12 @@ sub do_sr
     my $building;
     my $delay = $opt_delay;
 
-    print "Waiting for build results of $config->{prj}/$s[1]...\n";
+    print "Waiting for build results of $config->{prj}/$config->{package}...\n";
     $| = 1;
 
     do {
       sleep $delay;
-      if(open my $p, "osc -A https://$bs r --csv $bs_prefix$config->{prj} $s[1] |") {
+      if(open my $p, "osc -A https://$sr->{api} r --csv $sr->{prefix}$config->{prj} $config->{package} |") {
         # sample line:
         #
         # openSUSE_Factory|x86_64|unpublished|False|succeeded|
@@ -774,19 +742,13 @@ sub do_sr
     print "Build ok\n";
   }
 
-  if(!$config->{sr}) {
-    print "No submit request created\n";
-
-    return $err;
-  }
-
-  print "Creating submit request to $config->{sr}\n";
+  print "Creating submit request to $sr->{prj}\n";
 
   if(!$opt_try) {
     my $sr_resp = $tmp->file();
     my $user = $config->{email};
     $user =~ s/\@.*$//;
-    system "echo y | osc -A https://$bs sr -m 'submitted by $user via jenkins' --yes --nodevelproject $bs_prefix$config->{prj} $s[1] $s[0] >$sr_resp 2>&1";
+    system "echo y | osc -A https://$sr->{api} sr -m 'submitted by $user via jenkins' --yes --nodevelproject $sr->{prefix}$config->{prj} $config->{package} $sr->{prj} >$sr_resp 2>&1";
     $err = $? >> 8;
 
     my $resp_msg;
