@@ -65,6 +65,8 @@ my $opt_keep_date = 1;			# don't join consecutive commit messages if they have d
 my $opt_default_email = 'opensuse-packaging@opensuse.org';	# default email to use in changelog
 my $opt_weblate = 'bsc#1149754';	# bugzilla ref to use for Weblate commits
 
+$opt_default_email = $ENV{GIT2LOG_DEFAULT_EMAIL} if $ENV{GIT2LOG_DEFAULT_EMAIL};
+
 GetOptions(
   'help'          => sub { usage 0 },
   'version'       => \$opt_version,
