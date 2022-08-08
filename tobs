@@ -766,6 +766,13 @@ sub do_sr
         $err = 0;
       }
     }
+    else {
+      if($resp_msg =~ /created request id (\d+)/) {
+        my $url = "$sr->{api}/request/show/$1";
+        $url =~ s#^api\.#https://build.#;
+        print "Submit request URL: $url\n";
+      }
+    }
 
     print $resp_msg;
   }
