@@ -148,8 +148,10 @@ my $opt_save_temp;
 my $opt_try;
 my $opt_delay = 30;
 my $opt_target;
+my $opt_from;
 my $opt_spec;
 my $opt_obs;
+my $opt_no_tag;
 
 GetOptions(
   'sr=s'        => \$opt_sr,
@@ -157,16 +159,21 @@ GetOptions(
   'delay=i'     => \$opt_delay,
   'try'         => \$opt_try,
   'target=s'    => \$opt_target,
+  'from=s'      => \$opt_from,
   'spec=s'      => \$opt_spec,
   'obs=s'       => \$opt_obs,
+  'no-tag'      => \$opt_no_tag,
   'save-temp'   => \$opt_save_temp,
   'version'     => sub { print "$VERSION\n"; exit 0 },
   'help'        => sub { usage 0 },
 ) || usage 1;
 
+$opt_from = $opt_target if $opt_from eq "";
+
 my $tmp = Tmp::new($opt_save_temp);   
 
-my $tmpdir = $tmp->dir('package');
+my $tmpdir_to = $tmp->dir('to_package');
+my $tmpdir_from = $tmp->dir('from_package');
 
 $ENV{PATH} = "$ENV{HOME}/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 
@@ -174,6 +181,14 @@ get_rc;
 get_target;
 
 exit do_sr if $opt_sr;
+
+if($config->{to_prj} eq $config->{from_prj} && $config->{to_bs} eq $config->{from_bs}) {
+  $config->{single} = 1;
+  $tmpdir_from = $tmpdir_to;
+}
+else {
+  $config->{single} = 0;
+}
 
 get_git_branch_and_tags;
 
@@ -193,21 +208,45 @@ die "package/$config->{archive}: archive missing\n" unless -f "package/$config->
 @s = grep { $_ ne $config->{archive} } @s;
 $config->{sources}{$_} = 1 for @s;
 
-print "      Package: $config->{package}\n";
-print "      Version: $config->{version}\n";
-print "   GIT Branch: $config->{branch}\n";
-print "    Spec File: $opt_spec\n" if $opt_spec;
-print "  OBS Sources: $opt_obs\n" if $opt_obs;
-print "      Project: $config->{prj}\n";
-print "   Maintainer: $config->{email}\n";
-print "           BS: $config->{bs}\n";
-print "      TMP Dir: $tmpdir\n";
+print "       Package: $config->{package}\n";
+print "       Version: $config->{version}\n";
+print "    GIT Branch: $config->{branch}\n";
+print "     Spec File: $opt_spec\n" if $opt_spec;
+print "   OBS Sources: $opt_obs\n" if $opt_obs;
+if($config->{to_prj} eq $config->{from_prj}) {
+  print "       Project: $config->{to_prj}\n";
+}
+else {
+  print "Source Project: $config->{from_prj}\n";
+  print "Target Project: $config->{to_prj}\n";
+}
+print "    Maintainer: $config->{email}\n";
+if($config->{to_bs} eq $config->{from_bs}) {
+  print "            BS: $config->{to_bs}\n";
+}
+else {
+  print "     Source BS: $config->{from_bs}\n";
+  print "     Target BS: $config->{to_bs}\n";
+}
+print "         TMP Dir: $tmp->{base}\n";
 
-print "Checking out $config->{prj}/$config->{package}...\n";
-system "cd $tmpdir ; osc -A https://$config->{bs} co -c $config->{prj}/$config->{package} >/dev/null";
-system "ls -og $tmpdir/$config->{package} | tail -n +2";
+print "Checking out $config->{from_prj}/$config->{package}...\n";
+system "cd $tmpdir_from ; osc -A https://$config->{from_bs} co -c $config->{from_prj}/$config->{package} >/dev/null";
+system "ls -og $tmpdir_from/$config->{package} | tail -n +2";
 
-my @specs = map { s#.*/##; s#\.spec$##; $_ } glob("$tmpdir/$config->{package}/*.spec");
+if(!$config->{single}) {
+  print "Checking out $config->{to_prj}/$config->{package}...\n";
+  system "cd $tmpdir_to ; osc -A https://$config->{to_bs} co -c $config->{to_prj}/$config->{package} >/dev/null 2>1";
+  if(! -d "$tmpdir_to/$config->{package}") {
+    print "Target package missing - will be automatically created later.\n";
+    $config->{create_target} = 1;
+  }
+  else {
+    system "ls -og $tmpdir_to/$config->{package} | tail -n +2";
+  }
+}
+
+my @specs = map { s#.*/##; s#\.spec$##; $_ } glob("$tmpdir_from/$config->{package}/*.spec");
 if(@specs) {
   $config->{spec_name} = $specs[0];
   print "Package has several spec files; using $config->{spec_name} as base\n" if @specs > 1;
@@ -229,14 +268,14 @@ elsif($opt_obs) {
   }
 }
 
-if(open my $f, "$tmpdir/$config->{package}/$config->{spec_name}.spec") {
+if(open my $f, "$tmpdir_from/$config->{package}/$config->{spec_name}.spec") {
   $config->{spec_file} = [ <$f> ];
   close $f;
 }
 
 die "missing spec file\n" if !defined $config->{spec_file};
 
-if(open my $f, "$tmpdir/$config->{package}/$config->{spec_name}.changes") {
+if(open my $f, "$tmpdir_from/$config->{package}/$config->{spec_name}.changes") {
   $config->{changes} = [ <$f> ];
   close $f;
 }
@@ -245,20 +284,20 @@ die "missing changes\n" if !defined $config->{changes};
 
 # copy OBS files
 if($opt_obs) {
-  system "cp $opt_obs/* $tmpdir/$config->{package}/"
+  system "cp $opt_obs/* $tmpdir_from/$config->{package}/"
 }
 
 update_spec;
 
 # write new spec file
-if(open my $f, ">$tmpdir/$config->{package}/$config->{spec_name}.spec") {
+if(open my $f, ">$tmpdir_from/$config->{package}/$config->{spec_name}.spec") {
   print $f @{$config->{spec_file}};
   close $f;
 }
 
 update_changelog;
 
-my $new_changelog = "$tmpdir/$config->{package}/$config->{spec_name}.changes";
+my $new_changelog = "$tmpdir_from/$config->{package}/$config->{spec_name}.changes";
 
 # write new changes file
 if(open my $f, ">$new_changelog") {
@@ -268,13 +307,13 @@ if(open my $f, ">$new_changelog") {
 
 # delete obsolete files
 for ($config->{rm_archive}, keys %{$config->{rm_sources}}, keys %{$config->{rm_patches}}) {
-  # print "unlink $tmpdir/$config->{package}/$_\n";
-  unlink "$tmpdir/$config->{package}/$_";
+  # print "unlink $tmpdir_from/$config->{package}/$_\n";
+  unlink "$tmpdir_from/$config->{package}/$_";
 }
 
 # copy new files except *.changes (we would overwrite our newly generated one)
 rename $new_changelog, "$new_changelog.tmp";
-system "cp package/* $tmpdir/$config->{package}/";
+system "cp package/* $tmpdir_from/$config->{package}/";
 rename "$new_changelog.tmp", $new_changelog;
 
 # copy changes and specs
@@ -285,18 +324,36 @@ if(@specs > 1) {
   for my $s (@specs) {
     my $stheme = $s;
     $stheme =~ s/.*-//;
-    system "cp $tmpdir/$config->{package}/$base.changes $tmpdir/$config->{package}/$s.changes";
-    system "perl -ple 's/^%define\\s+(\\S+)\\s+$theme\\s*\$/%define \$1 $stheme/' $tmpdir/$config->{package}/$base.spec > $tmpdir/$config->{package}/$s.spec";
+    system "cp $tmpdir_from/$config->{package}/$base.changes $tmpdir_from/$config->{package}/$s.changes";
+    system "perl -ple 's/^%define\\s+(\\S+)\\s+$theme\\s*\$/%define \$1 $stheme/' $tmpdir_from/$config->{package}/$base.spec > $tmpdir_from/$config->{package}/$s.spec";
   }
 }
 
 # create new tag if needed
 update_tag;
 
-system "cd $tmpdir/$config->{package} ; osc -A https://$config->{bs} addremove";
-print "Submitting changes to $config->{prj}/$config->{package}...\n";
-system "cd $tmpdir/$config->{package} ; osc -A https://$config->{bs} ci -m '- release $config->{version}'" if !$opt_try;
-system "ls -og $tmpdir/$config->{package} | tail -n +2";
+if(!$config->{single}) {
+  if($config->{create_target}) {
+    if(!$opt_try) {
+      my $tmp_d = $tmp->dir('create');
+      system "cd $tmp_d ; osc -A https://$config->{to_bs} init $config->{to_prj}";
+      system "cd $tmp_d ; osc -A https://$config->{to_bs} mkpac $config->{package}";
+      system "cd $tmp_d ; osc -A https://$config->{to_bs} ci -n";
+      system "cd $tmpdir_to ; osc -A https://$config->{to_bs} co -c $config->{to_prj}/$config->{package} >/dev/null";
+    }
+    else {
+      mkdir "$tmpdir_to/$config->{package}";
+    }
+  }
+
+  system "rm -f $tmpdir_to/$config->{package}/*";
+  system "cp -a $tmpdir_from/$config->{package}/* $tmpdir_to/$config->{package}";
+}
+
+system "cd $tmpdir_to/$config->{package} ; osc -A https://$config->{to_bs} addremove" unless $config->{create_target} && $opt_try;
+print "Submitting changes to $config->{to_prj}/$config->{package}...\n";
+system "cd $tmpdir_to/$config->{package} ; osc -A https://$config->{to_bs} ci -m '- release $config->{version}'" if !$opt_try;
+system "ls -og $tmpdir_to/$config->{package} | tail -n +2";
 
 
 # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -319,10 +376,13 @@ General options:
                             PROJECT ist the project name,
                             PACKAGE is the (optional) package name - in case it does not
                             match the git project name.
+  --from SOURCE             If specified, submit from SOURCE to TARGET. If this options
+                            is not used, SOURCE = TARGET is assumed.
   --spec FILE               Use FILE as spec file template instead of the spec file from
                             the build service project.
   --obs DIR                 Commit everything in DIR to OBS. Note that *.changes is still
                             automatically created.
+  --no-tag                  Don\'t create new git tag.
   --try                     Don\'t actually do anything.
   --version                 Show tobs version.
   --save-temp               Keep temporary files.
@@ -453,14 +513,24 @@ sub get_target
 
   $opt_sr = $config->{rc}{aliases}{$opt_sr} if $config->{rc}{aliases}{$opt_sr};
   $opt_target = $config->{rc}{aliases}{$opt_target} if $config->{rc}{aliases}{$opt_target};
+  $opt_from = $config->{rc}{aliases}{$opt_from} if $config->{rc}{aliases}{$opt_from};
 
   if($opt_target =~ m#^([^:]+)://([^/]+)$#) {
     $bs_name = $1;
-    $config->{bs} = $config->{rc}{$bs_name}{api};
-    $config->{prj} = $2;
+    $config->{to_bs} = $config->{rc}{$bs_name}{api};
+    $config->{to_prj} = $2;
   }
   else {
     die "invalid target spec: $opt_target\n";
+  }
+
+  if($opt_from =~ m#^([^:]+)://([^/]+)$#) {
+    $bs_name = $1;
+    $config->{from_bs} = $config->{rc}{$bs_name}{api};
+    $config->{from_prj} = $2;
+  }
+  else {
+    die "invalid target spec: $opt_from\n";
   }
 
   if($opt_sr =~ m#^([^:]+)://([^/]+)$#) {
@@ -472,14 +542,14 @@ sub get_target
 
   get_git_package if !$config->{package};
 
-  if(!$config->{prj} || !$config->{package} || !$config->{bs}) {
-    die "incomplete config\n  project = $config->{prj}\n  package = $config->{package}\n  api = $config->{bs}\n";
+  if(!$config->{package} || !$config->{to_prj} || !$config->{to_bs} || !$config->{from_prj} || !$config->{from_bs}) {
+    die "incomplete config\n  package = $config->{package}\n  dst project = $config->{to_prj}\n  dst api = $config->{to_bs}\n  src project = $config->{from_prj}\n  src api = $config->{from_bs}\n";
   }
 
   if($ENV{USER_NAME}) {
     $config->{email} = $ENV{USER_NAME};
   }
-  elsif(open my $p, "osc -A https://$config->{bs} maintainer -e -B $config->{prj} $config->{package} |") {
+  elsif(open my $p, "osc -A https://$config->{from_bs} maintainer -e -B $config->{from_prj} $config->{package} |") {
     while (<$p>) {
       s/^\s+//;
       s/,.*$//;
@@ -636,7 +706,7 @@ sub update_tag
   my $tag = "$config->{branch}-$config->{version}";
   $tag =~ s/^master-//;
 
-  if(!$config->{tags}{$tag}) {
+  if(!$config->{tags}{$tag} && !$opt_no_tag) {
     print "Creating tag $tag\n";
     system "git tag $tag ; git push origin tags/$tag" if !$opt_try;
   }
@@ -660,13 +730,13 @@ sub do_sr
   my $sr = $config->{sr};
 
   print "      Package: $config->{package}\n";
-  print "      Project: $sr->{prefix}$config->{prj}\n";
+  print "      Project: $sr->{prefix}$config->{to_prj}\n";
   print "    Submit To: $sr->{prj}\n";
   print "   Maintainer: $config->{email}\n";
   print "           BS: $sr->{api}\n";
 
-  if($sr->{api} ne $config->{bs} && !$sr->{prefix}) {
-    die "submitting from $config->{bs} to $sr->{api} not possible\n";
+  if($sr->{api} ne $config->{to_bs} && !$sr->{prefix}) {
+    die "submitting from $config->{to_bs} to $sr->{api} not possible\n";
   }
 
   my $err = 0;
@@ -677,12 +747,12 @@ sub do_sr
     my $building;
     my $delay = $opt_delay;
 
-    print "Waiting for build results of $config->{prj}/$config->{package}...\n";
+    print "Waiting for build results of $config->{to_prj}/$config->{package}...\n";
     $| = 1;
 
     do {
       sleep $delay;
-      if(open my $p, "osc -A https://$sr->{api} r --csv $sr->{prefix}$config->{prj} $config->{package} |") {
+      if(open my $p, "osc -A https://$sr->{api} r --csv $sr->{prefix}$config->{to_prj} $config->{package} |") {
         # sample line:
         #
         # openSUSE_Factory|x86_64|unpublished|False|succeeded|
@@ -748,7 +818,7 @@ sub do_sr
     my $sr_resp = $tmp->file();
     my $user = $config->{email};
     $user =~ s/\@.*$//;
-    system "echo y | osc -A https://$sr->{api} sr -m 'submitted by $user via jenkins' --yes --nodevelproject $sr->{prefix}$config->{prj} $config->{package} $sr->{prj} >$sr_resp 2>&1";
+    system "echo y | osc -A https://$sr->{api} sr -m 'submitted by $user via jenkins' --yes --nodevelproject $sr->{prefix}$config->{to_prj} $config->{package} $sr->{prj} >$sr_resp 2>&1";
     $err = $? >> 8;
 
     my $resp_msg;

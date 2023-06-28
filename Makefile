@@ -21,6 +21,10 @@ changelog: $(GITDEPS)
 install:
 	install -m 755 -d $(DESTDIR)/usr/bin
 	install -m 755 -t $(DESTDIR)/usr/bin $(SCRIPTS)
+	@cp tobs tobs.tmp
+	@perl -pi -e 's/0\.0/$(VERSION)/ if /VERSION = /' tobs.tmp
+	install -m 755 -D tobs.tmp $(DESTDIR)/usr/bin/tobs
+	@rm -f tobs.tmp
 
 archive: changelog
 	@if [ ! -d .git ] ; then echo no git repo ; false ; fi
