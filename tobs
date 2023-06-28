@@ -150,6 +150,7 @@ my $opt_delay = 30;
 my $opt_target;
 my $opt_spec;
 my $opt_obs;
+my $opt_no_tag;
 
 GetOptions(
   'sr=s'        => \$opt_sr,
@@ -159,6 +160,7 @@ GetOptions(
   'target=s'    => \$opt_target,
   'spec=s'      => \$opt_spec,
   'obs=s'       => \$opt_obs,
+  'no-tag'      => \$opt_no_tag,
   'save-temp'   => \$opt_save_temp,
   'version'     => sub { print "$VERSION\n"; exit 0 },
   'help'        => sub { usage 0 },
@@ -323,6 +325,7 @@ General options:
                             the build service project.
   --obs DIR                 Commit everything in DIR to OBS. Note that *.changes is still
                             automatically created.
+  --no-tag                  Don\'t create new git tag.
   --try                     Don\'t actually do anything.
   --version                 Show tobs version.
   --save-temp               Keep temporary files.
@@ -636,7 +639,7 @@ sub update_tag
   my $tag = "$config->{branch}-$config->{version}";
   $tag =~ s/^master-//;
 
-  if(!$config->{tags}{$tag}) {
+  if(!$config->{tags}{$tag} && !$opt_no_tag) {
     print "Creating tag $tag\n";
     system "git tag $tag ; git push origin tags/$tag" if !$opt_try;
   }
