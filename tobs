@@ -509,6 +509,7 @@ sub get_target
   my $bs_name;
 
   $config->{package} = $2 if $opt_sr =~ s#([^/])/([^/]+)$#$1#;
+  $config->{package} = $2 if $opt_from =~ s#([^/])/([^/]+)$#$1#;
   $config->{package} = $2 if $opt_target =~ s#([^/])/([^/]+)$#$1#;
 
   $opt_sr = $config->{rc}{aliases}{$opt_sr} if $config->{rc}{aliases}{$opt_sr};
