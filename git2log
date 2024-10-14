@@ -868,7 +868,7 @@ sub format_log
   }
 
   # step 9
-  # - remove shortened lines (that match the beginning of other lines)
+  # - remove shortened lines (that [case-insensitive] match the beginning of other lines)
 
   for my $commit (@$commits) {
     next unless $commit->{formatted};
@@ -879,7 +879,7 @@ sub format_log
       $str =~ s/\s*…$//;	# github likes to shorten lines with ' …'
       my $str_len = length $str;
       for (@{$commit->{formatted}}) {
-        return 1 if $str_len < length($_) && $str eq substr($_, 0, $str_len);
+        return 1 if $str_len < length($_) && "\L$str" eq substr("\L$_", 0, $str_len);
       }
 
       return 0;

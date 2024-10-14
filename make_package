@@ -19,6 +19,14 @@ while true ; do
     continue
   fi
 
+  if [ "$1" = "--set-name" ] ; then
+    PACKAGE_NAME="$2"
+    set_name=1
+    shift
+    shift
+    continue
+  fi
+
   break
 done
 
@@ -46,6 +54,11 @@ if [ -f changelog ] || grep -q ^changelog: Makefile ; then
   extra_files="$extra_files changelog"
 fi
 
+if [ "$set_name" = 1 ] ; then
+  echo "$PACKAGE_NAME" > PACKAGE_NAME
+  extra_files="$extra_files PACKAGE_NAME"
+fi
+
 if [ ! -d .git ] ; then
   echo no git repo
   exit 1
@@ -58,3 +71,7 @@ tar -r -f package/$PACKAGE_PREFIX.tar \
   --mtime="`git show -s --format=%ci`" \
   --transform="s:^:$PACKAGE_PREFIX/:" $extra_files
 xz -f package/$PACKAGE_PREFIX.tar
+
+if [ "$set_name" = 1 ] ; then
+  rm -f PACKAGE_NAME
+fi
