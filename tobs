@@ -284,7 +284,11 @@ die "missing changes\n" if !defined $config->{changes};
 
 # copy OBS files
 if($opt_obs) {
-  system "cp $opt_obs/* $tmpdir_from/$config->{package}/"
+  system "cp $opt_obs/* $tmpdir_from/$config->{package}/";
+  # keep only one spec file
+  for my $s (glob "$tmpdir_from/$config->{package}/*spec") {
+    unlink $s if $s !~ /\/$config->{spec_name}.spec$/;
+  }
 }
 
 update_spec;

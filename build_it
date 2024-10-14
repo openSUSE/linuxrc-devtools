@@ -40,6 +40,12 @@ while true ; do
     continue
   fi
 
+  if [ "$1" = "--no-tag" ] ; then
+    tag_opt="--no-tag"
+    shift
+    continue
+  fi
+
   break
 done
 
@@ -63,7 +69,7 @@ else
   $prepare
 fi
 
-tobs $target $spec_opt $obs_opt
+tobs $target $spec_opt $obs_opt $tag_opt
 
 if [ -z "$prepare" ] ; then
   make $clean_target
