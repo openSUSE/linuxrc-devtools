@@ -760,41 +760,44 @@ sub do_sr
       if(open my $p, "osc -A https://$sr->{api} r --csv $sr->{prefix}$config->{to_prj} $config->{package} |") {
         # sample line:
         #
-        # openSUSE_Factory|x86_64|unpublished|False|succeeded|
+        # old: openSUSE_Factory|x86_64|unpublished|False|succeeded|
+        # new: "openSUSE_Factory","x86_64","hwinfo","unpublished","False","succeeded",""
         #
-        # field 0, 1, 2: not relevant
-        # field 3: False or True; if True, state is going to change
-        # field 4: status
-        # field 5: sometimes a 6th field is added with the real state
+        # field 0, 1, 2, 3: not relevant
+        # field 4: False or True; if True, state is going to change
+        # field 5: status
+        # field 6: sometimes a 7th field is added with the real state
         #
         while (<$p>) {
           chomp;
-          my @i = split /\|/;
+          my @i = split /,/;
+          s/^"|"$//g for @i;
+
           if(
-            $i[3] eq "False" &&
+            $i[4] eq "False" &&
             (
-              $i[4] eq "succeeded" ||
-              $i[4] eq "finished" && $i[5] eq "succeeded"
+              $i[5] eq "succeeded" ||
+              $i[5] eq "finished" && $i[6] eq "succeeded"
             )
           ) {
             $ok = 1;
           }
           elsif(
-            $i[3] eq "False" &&
+            $i[4] eq "False" &&
             (
-              $i[4] eq "failed" ||
-              $i[4] eq "unresolvable" ||
-              $i[4] eq "broken" ||
-              $i[4] eq "finished" && $i[5] eq "failed"
+              $i[5] eq "failed" ||
+              $i[5] eq "unresolvable" ||
+              $i[5] eq "broken" ||
+              $i[5] eq "finished" && $i[6] eq "failed"
             )
           ) {
             $failed = 1;
           }
           elsif(
-            $i[3] eq "False" &&
+            $i[4] eq "False" &&
             !(
-              $i[4] eq "excluded" ||
-              $i[4] eq "disabled"
+              $i[5] eq "excluded" ||
+              $i[5] eq "disabled"
             )
           ) {
             $building = 1;
